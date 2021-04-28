@@ -1156,8 +1156,10 @@ typedef enum childInfoType {
 } childInfoType;
 
 struct redisServer {
+    //主进程pid
     /* General */
     pid_t pid;                  /* Main process pid. */
+    //主线程id
     pthread_t main_thread_id;         /* Main thread id */
     char *configfile;           /* Absolute config file path, or NULL */
     char *executable;           /* Absolute executable file path. */
@@ -1169,8 +1171,11 @@ struct redisServer {
     mode_t umask;               /* The umask value of the process on startup */
     int hz;                     /* serverCron() calls frequency in hertz */
     int in_fork_child;          /* indication that this is a fork child */
+    //redis 数据库是个数组, 这里是数据的引用
     redisDb *db;
+    //存储redis命令字典, 这里的命令的key可能是别名
     dict *commands;             /* Command table */
+    //存储redis原始命令字典, 这里的命令没有变更过名称
     dict *orig_commands;        /* Command table before command renaming. */
     aeEventLoop *el;
     rax *errors;                /* Errors table */
