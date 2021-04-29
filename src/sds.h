@@ -94,10 +94,17 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_64 4
 #define SDS_TYPE_MASK 7
 #define SDS_TYPE_BITS 3
+//获取 sdshdr 引用地址, 并且将地址放到 sh 变量中
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
+//这里为什么 s - sizeof(struct sdshdr##T) 就能得到 sdshdr##T 呢
+//可以看一下 sdshdr##T 的内存结构, 如: sdshdr8, 代表字符数组引用的sds在结构体的最后, 数组名不占空间, 我们可以得到
+// 结构体的引用地址 = 字符数组的引用地址 - 结体的大小
+//获取 sdshdr 引用地址
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
+//左移三位, 也就是获取高5位作为返回值
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
+//内联函数, 用于获取sds字符串的长度
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -115,6 +122,7 @@ static inline size_t sdslen(const sds s) {
     return 0;
 }
 
+//内联函数, 用于获取sds的剩余空间, 剩余空间 = alloc - len
 static inline size_t sdsavail(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -141,6 +149,7 @@ static inline size_t sdsavail(const sds s) {
     return 0;
 }
 
+//设置sds的长度
 static inline void sdssetlen(sds s, size_t newlen) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
