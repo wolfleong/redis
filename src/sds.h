@@ -45,6 +45,7 @@ typedef char *sds;
 
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
+//sds结构体从4.0开始, 开始使用这5种sdshdr${n}的定义, 用于更合理地分配内存, 注意, 只是定义了 sdshdr5, 但是不会使用.
 //最长 2^5-1 长度的 sdshdr
 struct __attribute__ ((__packed__)) sdshdr5 {
     //低三位保存类型标志, 高5位用于保存字符串长度. 最多能保存5bit长度的字符串
@@ -83,6 +84,8 @@ struct __attribute__ ((__packed__)) sdshdr64 {
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
     char buf[];
 };
+
+//宏定义中, 用#于把宏参数变成一个字符串, 用##把两个宏参数粘合在一起
 
 #define SDS_TYPE_5  0
 #define SDS_TYPE_8  1
