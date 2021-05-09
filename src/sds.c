@@ -39,8 +39,10 @@
 #include "sds.h"
 #include "sdsalloc.h"
 
+//设置全局变量的值
 const char *SDS_NOINIT = "SDS_NOINIT";
 
+//根据给定的类型获取 sdsHdr 的结构体的大小
 static inline int sdsHdrSize(char type) {
     switch(type&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
@@ -57,6 +59,7 @@ static inline int sdsHdrSize(char type) {
     return 0;
 }
 
+//根据字符串的大小, 返回对应的sdsHdr的类型
 static inline char sdsReqType(size_t string_size) {
     if (string_size < 1<<5)
         return SDS_TYPE_5;
@@ -73,6 +76,7 @@ static inline char sdsReqType(size_t string_size) {
 #endif
 }
 
+//根据sdsHdr的类型, 返回此类型能存字符串的最大长度
 static inline size_t sdsTypeMaxSize(char type) {
     if (type == SDS_TYPE_5)
         return (1<<5) - 1;
@@ -100,31 +104,50 @@ static inline size_t sdsTypeMaxSize(char type) {
  * You can print the string with printf() as there is an implicit \0 at the
  * end of the string. However the string is binary safe and can contain
  * \0 characters in the middle, as the length is stored in the sds header. */
+//如果init指针是NULL, 则将内存初始化为0, 如果init是SDS_NOINIT, 则不进行初始化
+//trymalloc 用于指定分配内存的方法
 sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
     void *sh;
     sds s;
+    //根据字符串长度, 获取sdsHdr的类型
     char type = sdsReqType(initlen);
     /* Empty strings are usually created in order to append. Use type 8
      * since type 5 is not good at this. */
+    //如果类型是 5, 或者初始字符串长度是 0 , 则默认给 8
     if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
+    //获取 sdsHdr 的结构体的长度
     int hdrlen = sdsHdrSize(type);
+    //flag字段的指针
     unsigned char *fp; /* flags pointer. */
+    //字符数组可使用的长度
     size_t usable;
 
+    //确保不会溢出
     assert(initlen + hdrlen + 1 > initlen); /* Catch size_t overflow */
+    //分配sds内存, sds内存大小 = sdsHdr + 字符串长度 + 空标识符
+    //trymalloc=1, 则尝试分配内存, 分配不了则返回 NULL, trymalloc=0则强制分配内存, 分配不了, 则直接打错误日志, 并且退出程序
     sh = trymalloc?
         s_trymalloc_usable(hdrlen+initlen+1, &usable) :
         s_malloc_usable(hdrlen+initlen+1, &usable);
+    //没分配到, 则返回 NULL
     if (sh == NULL) return NULL;
+    //如果指定不初始化字符数组, 则init设置为空
     if (init==SDS_NOINIT)
         init = NULL;
+    //如果没有初始化内容
     else if (!init)
+        //将sh的前hdrlen+initlen+1个字节, 初始化成0
         memset(sh, 0, hdrlen+initlen+1);
+    //计算出 sds 的指针, 也就是字符数组的指针
     s = (char*)sh+hdrlen;
+    //计算出 flag 类型标识的指针
     fp = ((unsigned char*)s)-1;
+    //重新计算sdsHdr已经使用的长度
     usable = usable-hdrlen-1;
+    //如果可以长度超过sdsHdr类型的最大字符度长度, 则默认取对应类型的最大长度
     if (usable > sdsTypeMaxSize(type))
         usable = sdsTypeMaxSize(type);
+    //根据sdsHdr的类型设置 len, alloc, flag 属性
     switch(type) {
         case SDS_TYPE_5: {
             *fp = type | (initlen << SDS_TYPE_BITS);
@@ -159,40 +182,50 @@ sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
             break;
         }
     }
+    //如果有初始化长度且有初始化内容, 则将内容设置到字符数组中
     if (initlen && init)
         memcpy(s, init, initlen);
+    //设置最后一个空串
     s[initlen] = '\0';
+    //返回 sds
     return s;
 }
 
+//强制分配 sds 的内存
 sds sdsnewlen(const void *init, size_t initlen) {
     return _sdsnewlen(init, initlen, 0);
 }
 
+//尝试分配 sds的内存
 sds sdstrynewlen(const void *init, size_t initlen) {
     return _sdsnewlen(init, initlen, 1);
 }
 
+//创建一个空的sds
 /* Create an empty (zero length) sds string. Even in this case the string
  * always has an implicit null term. */
 sds sdsempty(void) {
     return sdsnewlen("",0);
 }
 
+//根据给定的C字符串创建sds
 /* Create a new sds string starting from a null terminated C string. */
 sds sdsnew(const char *init) {
     size_t initlen = (init == NULL) ? 0 : strlen(init);
     return sdsnewlen(init, initlen);
 }
 
+//复制一个sds
 /* Duplicate an sds string. */
 sds sdsdup(const sds s) {
     return sdsnewlen(s, sdslen(s));
 }
 
+//释放sds对象
 /* Free an sds string. No operation is performed if 's' is NULL. */
 void sdsfree(sds s) {
     if (s == NULL) return;
+    //计算出sdsHdr的指针, 然后释放内存
     s_free((char*)s-sdsHdrSize(s[-1]));
 }
 

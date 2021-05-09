@@ -63,6 +63,7 @@ void zlibc_free(void *ptr) {
 /* When using the libc allocator, use a minimum allocation size to match the
  * jemalloc behavior that doesn't return NULL in this case.
  */
+//如果 x > 0 , 则返回 x, 否则返回 long 的字节长度
 #define MALLOC_MIN_SIZE(x) ((x) > 0 ? (x) : sizeof(long))
 
 /* Explicitly override malloc/free etc when using tcmalloc. */
@@ -80,26 +81,33 @@ void zlibc_free(void *ptr) {
 #define dallocx(ptr,flags) je_dallocx(ptr,flags)
 #endif
 
+//增加内存统计
 #define update_zmalloc_stat_alloc(__n) atomicIncr(used_memory,(__n))
+//减少内存统计
 #define update_zmalloc_stat_free(__n) atomicDecr(used_memory,(__n))
 
 static redisAtomic size_t used_memory = 0;
 
+//内存分配默认的OOM错误处理
 static void zmalloc_default_oom(size_t size) {
+    //打印内存异常日志
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
         size);
     fflush(stderr);
+    //退出程序
     abort();
 }
 
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
+//尝试分配内存, 分配不了则返回 NULL
 /* Try allocating memory, and return NULL if failed.
  * '*usable' is set to the usable size if non NULL. */
 void *ztrymalloc_usable(size_t size, size_t *usable) {
     ASSERT_NO_SIZE_OVERFLOW(size);
     void *ptr = malloc(MALLOC_MIN_SIZE(size)+PREFIX_SIZE);
 
+    //没分配到, 则返回 NULL
     if (!ptr) return NULL;
 #ifdef HAVE_MALLOC_SIZE
     size = zmalloc_size(ptr);
@@ -127,6 +135,8 @@ void *ztrymalloc(size_t size) {
     return ptr;
 }
 
+//分配内存, 如果没有分配到, 则打印错误日志, 并且退出程序
+// *usable 是用于返回可用的内存大小
 /* Allocate memory or panic.
  * '*usable' is set to the usable size if non NULL. */
 void *zmalloc_usable(size_t size, size_t *usable) {

@@ -87,12 +87,16 @@
 #define HAVE_DEFRAG
 #endif
 
+//申请大小为size的内存空间
 void *zmalloc(size_t size);
+//以块的形式申请内存, 默认是1块, 对应 calloc
 void *zcalloc(size_t size);
+//重新调用已申请的内存大小为size
 void *zrealloc(void *ptr, size_t size);
 void *ztrymalloc(size_t size);
 void *ztrycalloc(size_t size);
 void *ztryrealloc(void *ptr, size_t size);
+/释放内存
 void zfree(void *ptr);
 void *zmalloc_usable(size_t size, size_t *usable);
 void *zcalloc_usable(size_t size, size_t *usable);
@@ -101,16 +105,23 @@ void *ztrymalloc_usable(size_t size, size_t *usable);
 void *ztrycalloc_usable(size_t size, size_t *usable);
 void *ztryrealloc_usable(void *ptr, size_t size, size_t *usable);
 void zfree_usable(void *ptr, size_t *usable);
+//字符串复制
 char *zstrdup(const char *s);
+//获取redis已经使用(分配)的内存大小
 size_t zmalloc_used_memory(void);
+//自定义内存溢出时回调函数
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
+//获取RSS(常驻内存集)大小
 size_t zmalloc_get_rss(void);
 int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *resident);
 void set_jemalloc_bg_thread(int enable);
 int jemalloc_purge();
+//获取进程私有的内容已经发生更改的内存大小
 size_t zmalloc_get_private_dirty(long pid);
 size_t zmalloc_get_smap_bytes_by_field(char *field, long pid);
+//获取物理内存大小
 size_t zmalloc_get_memory_size(void);
+//直接调用系统free函数释放已分配的内存
 void zlibc_free(void *ptr);
 
 #ifdef HAVE_DEFRAG

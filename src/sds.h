@@ -34,6 +34,7 @@
 #define __SDS_H
 
 #define SDS_MAX_PREALLOC (1024*1024)
+//用于标识, 创建sds时, 不初始化字符数组
 extern const char *SDS_NOINIT;
 
 #include <sys/types.h>
@@ -46,6 +47,7 @@ typedef char *sds;
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
 //sds结构体从4.0开始, 开始使用这5种sdshdr${n}的定义, 用于更合理地分配内存, 注意, 只是定义了 sdshdr5, 但是不会使用.
+// __attribute__ ((__packed__)) 是指定编译器属性, 非语言特性, packed属性的主要目的是让编译器更紧凑地使用内存, 具体可以google一下
 //最长 2^5-1 长度的 sdshdr
 struct __attribute__ ((__packed__)) sdshdr5 {
     //低三位保存类型标志, 高5位用于保存字符串长度. 最多能保存5bit长度的字符串
@@ -92,6 +94,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_16 2
 #define SDS_TYPE_32 3
 #define SDS_TYPE_64 4
+//低三位的掩码,  也就是 00000111
 #define SDS_TYPE_MASK 7
 #define SDS_TYPE_BITS 3
 //获取 sdshdr 引用地址, 并且将地址放到 sh 变量中
@@ -106,6 +109,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 
 //内联函数, 用于获取sds字符串的长度
 static inline size_t sdslen(const sds s) {
+    //获取数组下标外, 前一个char大小的值, 也就相当于 SDSHDR 的 flag
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
@@ -174,6 +178,7 @@ static inline void sdssetlen(sds s, size_t newlen) {
     }
 }
 
+//扩展sds的长度
 static inline void sdsinclen(sds s, size_t inc) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -199,8 +204,10 @@ static inline void sdsinclen(sds s, size_t inc) {
     }
 }
 
+//获取数组分配的大小
 /* sdsalloc() = sdsavail() + sdslen() */
 static inline size_t sdsalloc(const sds s) {
+    //获取 flag 标记
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
@@ -217,6 +224,7 @@ static inline size_t sdsalloc(const sds s) {
     return 0;
 }
 
+//重置数组分配的大小
 static inline void sdssetalloc(sds s, size_t newlen) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -238,17 +246,26 @@ static inline void sdssetalloc(sds s, size_t newlen) {
     }
 }
 
+//创建给定长度的 sds
 sds sdsnewlen(const void *init, size_t initlen);
 sds sdstrynewlen(const void *init, size_t initlen);
+//创建字符串数组创建 sds
 sds sdsnew(const char *init);
+//创建空在的 sds
 sds sdsempty(void);
+//复制sds对象返回
 sds sdsdup(const sds s);
+//释放sds
 void sdsfree(sds s);
+//用空字符串扩展sds的长度
 sds sdsgrowzero(sds s, size_t len);
 sds sdscatlen(sds s, const void *t, size_t len);
+//sds拼接字符串
 sds sdscat(sds s, const char *t);
+//拼接两sds
 sds sdscatsds(sds s, const sds t);
 sds sdscpylen(sds s, const char *t, size_t len);
+//将给定的C字符串复制到sds里面, 覆盖SDS原有的字符串
 sds sdscpy(sds s, const char *t);
 
 sds sdscatvprintf(sds s, const char *fmt, va_list ap);
@@ -260,10 +277,12 @@ sds sdscatprintf(sds s, const char *fmt, ...);
 #endif
 
 sds sdscatfmt(sds s, char const *fmt, ...);
+//接受一个SDS和一个字符串作为参数, 从SDS中移除所有在D字符串中出现过的字符
 sds sdstrim(sds s, const char *cset);
 void sdsrange(sds s, ssize_t start, ssize_t end);
 void sdsupdatelen(sds s);
 void sdsclear(sds s);
+//对比两个sds是否相同
 int sdscmp(const sds s1, const sds s2);
 sds *sdssplitlen(const char *s, ssize_t len, const char *sep, int seplen, int *count);
 void sdsfreesplitres(sds *tokens, int count);
@@ -295,8 +314,11 @@ void *sdsAllocPtr(sds s);
  * Sometimes the program SDS is linked to, may use a different set of
  * allocators, but may want to allocate or free things that SDS will
  * respectively free or allocate. */
+//分配sds内存
 void *sds_malloc(size_t size);
+//重分配sds内存
 void *sds_realloc(void *ptr, size_t size);
+//释放sds内存
 void sds_free(void *ptr);
 
 #ifdef REDIS_TEST
