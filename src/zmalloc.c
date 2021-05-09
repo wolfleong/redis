@@ -49,14 +49,18 @@ void zlibc_free(void *ptr) {
 #include "atomicvar.h"
 
 #ifdef HAVE_MALLOC_SIZE
+//PREFIX_SIZE 用于保存指针对象的内存长度, 第三方内存分配器已经存了内存长度, 所以为 0
 #define PREFIX_SIZE (0)
+//定义 ASSERT_NO_SIZE_OVERFLOW 为空方法
 #define ASSERT_NO_SIZE_OVERFLOW(sz)
 #else
+//没有 HAVE_MALLOC_SIZE, 则定义保存内存大小的字节
 #if defined(__sun) || defined(__sparc) || defined(__sparc__)
 #define PREFIX_SIZE (sizeof(long long))
 #else
 #define PREFIX_SIZE (sizeof(size_t))
 #endif
+//定义ASSERT_NO_SIZE_OVERFLOW方法实, sz表示申请内存的大小, 判断申请内存量+内存大小PREFIX_SIZE 不会溢出
 #define ASSERT_NO_SIZE_OVERFLOW(sz) assert((sz) + PREFIX_SIZE > (sz))
 #endif
 
@@ -86,9 +90,10 @@ void zlibc_free(void *ptr) {
 //减少内存统计
 #define update_zmalloc_stat_free(__n) atomicDecr(used_memory,(__n))
 
+//用于统计已使用的内存, 原子性变量
 static redisAtomic size_t used_memory = 0;
 
-//内存分配默认的OOM错误处理
+//内存分配默认的OOM错误处理, 打印错误日志, 并且退出程序
 static void zmalloc_default_oom(size_t size) {
     //打印内存异常日志
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
@@ -104,24 +109,36 @@ static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 /* Try allocating memory, and return NULL if failed.
  * '*usable' is set to the usable size if non NULL. */
 void *ztrymalloc_usable(size_t size, size_t *usable) {
+    //判断size是否溢出
     ASSERT_NO_SIZE_OVERFLOW(size);
+    //分配内存
     void *ptr = malloc(MALLOC_MIN_SIZE(size)+PREFIX_SIZE);
 
     //没分配到, 则返回 NULL
     if (!ptr) return NULL;
+// 有获取分配内存大小的方法
 #ifdef HAVE_MALLOC_SIZE
+    //获取指针分配内存的大小
     size = zmalloc_size(ptr);
+    //更新内存统计
     update_zmalloc_stat_alloc(size);
+    //如果有指定 usable 指针, 则设置
     if (usable) *usable = size;
+    //返回分配的指针
     return ptr;
 #else
+    //保存数据所需分配内存的实际大小, 这里有点秀, int a = 1; *(&a)=2; 相当于给a赋值为2
     *((size_t*)ptr) = size;
+    //更新统计数据
     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
+    //设置 usable
     if (usable) *usable = size;
+    //计算出真正的指针, 也就是跳过PREFIX_SIZE大小后的内存首地址
     return (char*)ptr+PREFIX_SIZE;
 #endif
 }
 
+//分配指定大小的内存, 没有分配成功, 则调用oom处理器
 /* Allocate memory or panic */
 void *zmalloc(size_t size) {
     void *ptr = ztrymalloc_usable(size, NULL);
@@ -129,6 +146,7 @@ void *zmalloc(size_t size) {
     return ptr;
 }
 
+//尝试分配内存, 分配不了则返回 NULL
 /* Try allocating memory, and return NULL if failed. */
 void *ztrymalloc(size_t size) {
     void *ptr = ztrymalloc_usable(size, NULL);
