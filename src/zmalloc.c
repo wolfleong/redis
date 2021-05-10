@@ -398,9 +398,12 @@ void zfree_usable(void *ptr, size_t *usable) {
 
 //复制字符串
 char *zstrdup(const char *s) {
+    //获取字符串的长度, 字符串长度 + 字符串结束符(1)
     size_t l = strlen(s)+1;
+    //分配内存
     char *p = zmalloc(l);
 
+    //将字符串s的内容拷贝到指针p中
     memcpy(p,s,l);
     return p;
 }
