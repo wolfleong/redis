@@ -128,6 +128,7 @@ void *ztrymalloc_usable(size_t size, size_t *usable) {
     return ptr;
 #else
     //保存数据所需分配内存的实际大小, 这里有点秀, int a = 1; *(&a)=2; 相当于给a赋值为2
+    //这里相当于设置 PREFIX_SIZE 这段位置为 size
     *((size_t*)ptr) = size;
     //更新统计数据
     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
@@ -223,52 +224,82 @@ void *zcalloc_usable(size_t size, size_t *usable) {
     return ptr;
 }
 
+//尝试重分配内存
 /* Try reallocating memory, and return NULL if failed.
  * '*usable' is set to the usable size if non NULL. */
 void *ztryrealloc_usable(void *ptr, size_t size, size_t *usable) {
+    //断言size + prefix_size 不溢出
     ASSERT_NO_SIZE_OVERFLOW(size);
+//如果存在获取内存大小的方法
 #ifndef HAVE_MALLOC_SIZE
+    //旧的指针的原始指针(包括PREFIX_SIZE)
     void *realptr;
 #endif
+    //旧指针的内存大小
     size_t oldsize;
+    //新的指针
     void *newptr;
 
+    //如果指针不为空且要分配的内存长度为0, 则相当于释放内存
     /* not allocating anything, just redirect to free. */
     if (size == 0 && ptr != NULL) {
+        //释放内存
         zfree(ptr);
+        //设置可使用内存为0, 并且返回 NULL
         if (usable) *usable = 0;
         return NULL;
     }
+    //如果指针为空, 则直接尝试分配内存
     /* Not freeing anything, just redirect to malloc. */
     if (ptr == NULL)
         return ztrymalloc_usable(size, usable);
 
+//如果存在获取内存大小的方法
 #ifdef HAVE_MALLOC_SIZE
+    //获取指针原来的内存大小
     oldsize = zmalloc_size(ptr);
+    //重分配给定大小内存
     newptr = realloc(ptr,size);
+    //没有分配到, 直接返回 NULL
     if (newptr == NULL) {
         if (usable) *usable = 0;
         return NULL;
     }
 
+    //减少旧的内存统计
     update_zmalloc_stat_free(oldsize);
+    //获取新分配的内存大小
     size = zmalloc_size(newptr);
+    //添加内存统计
     update_zmalloc_stat_alloc(size);
+    //设置可用内存大小
     if (usable) *usable = size;
+    //返回新的指针
     return newptr;
 #else
+    //获取指向的头部的原始指针
     realptr = (char*)ptr-PREFIX_SIZE;
+    //获取 PREFIX_SIZE 的值, 也就是内存的大小
     oldsize = *((size_t*)realptr);
+    //重新分配
     newptr = realloc(realptr,size+PREFIX_SIZE);
+    //没有分配成功, 则返回 NULL
     if (newptr == NULL) {
         if (usable) *usable = 0;
         return NULL;
     }
 
+    //设置 PREFIX_SIZE 的值
     *((size_t*)newptr) = size;
+    //注意: 重分配内存时, 更新内存统计是没有操作PREFIX_SIZE的, 因为PREFIX_SIZE是没有变化的, 第一次内存分配时已经将PREFIX_SIZE纳入了
+    //所以, 这里只要重新申请的size就行了
+    //减少旧内存的统计
     update_zmalloc_stat_free(oldsize);
+    //更新新的内存
     update_zmalloc_stat_alloc(size);
+    //设置可用内存大小
     if (usable) *usable = size;
+    //计算出可用的指针
     return (char*)newptr+PREFIX_SIZE;
 #endif
 }
@@ -308,43 +339,64 @@ size_t zmalloc_usable_size(void *ptr) {
 }
 #endif
 
+//释放指针内存
 void zfree(void *ptr) {
+//存在获取内存大小的方法
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
     size_t oldsize;
 #endif
 
+    //如果指针为空, 直接返回
     if (ptr == NULL) return;
 #ifdef HAVE_MALLOC_SIZE
+    //减少内存统计
     update_zmalloc_stat_free(zmalloc_size(ptr));
+    //释放指针
     free(ptr);
 #else
+    //计算出原始指针
     realptr = (char*)ptr-PREFIX_SIZE;
+    //获取内存大小
     oldsize = *((size_t*)realptr);
+    //减少内存统计, 包括 PREFIX_SIZE
     update_zmalloc_stat_free(oldsize+PREFIX_SIZE);
+    //释放指针
     free(realptr);
 #endif
 }
 
+//跟zfree相同, *usable表示释放内存的大小
 /* Similar to zfree, '*usable' is set to the usable size being freed. */
 void zfree_usable(void *ptr, size_t *usable) {
 #ifndef HAVE_MALLOC_SIZE
+    //原始指针
     void *realptr;
+    //旧内存
     size_t oldsize;
 #endif
 
+    //如果指针为空, 则直接返回
     if (ptr == NULL) return;
+//存在获取内存大小的方法
 #ifdef HAVE_MALLOC_SIZE
+//获取内存大小, 并且减小内存统计
     update_zmalloc_stat_free(*usable = zmalloc_size(ptr));
+    //释放指针
     free(ptr);
 #else
+    //计算出原始指针
     realptr = (char*)ptr-PREFIX_SIZE;
+    //获取内存大小
     *usable = oldsize = *((size_t*)realptr);
+    //减少内存统计
     update_zmalloc_stat_free(oldsize+PREFIX_SIZE);
+    //释放内存
     free(realptr);
 #endif
 }
 
+//复制字符串
 char *zstrdup(const char *s) {
     size_t l = strlen(s)+1;
     char *p = zmalloc(l);

@@ -102,7 +102,7 @@
 #define HAVE_DEFRAG
 #endif
 
-//申请大小为size的内存空间
+//申请大小为size的内存空间, 不进行初始化, 有可能有脏数据
 void *zmalloc(size_t size);
 //以块的形式申请内存, 默认是1块, 对应 calloc, 并初始化为0
 void *zcalloc(size_t size);
