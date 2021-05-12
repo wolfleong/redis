@@ -28,6 +28,27 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+Redis内存模型:
+
+|--------|:代表8个字节大小
+
+
+| 头部   |            实际内存              |
+|--------|--------|--------|--------|--------|
+         ^
+         |
+         ptr:实际返回的地址
+
+上面的内存模型说明了两个问题：
+
+1.内存对齐,都是8个字节的，可以提高cpu响应速度
+
+2.返回的实际地址不包括头部
+
+ps:从左到右内存地址是增加的,默认大端模式
+*/
+
 #ifndef __ZMALLOC_H
 #define __ZMALLOC_H
 
@@ -85,6 +106,9 @@
 #ifndef ZMALLOC_LIB
 //定义ZMALLOC_LIB为"libc"
 #define ZMALLOC_LIB "libc"
+//如果存在 malloc_usable_size() 方法
+//malloc_usable_size 是glibc中malloc.h的函数, 这个函数中传入一个指针，返回指针指向的空间实际占用的大小,
+// 这个返回的大小，可能会比使用malloc申请的要大，由于系统的内存对齐或者最小分配限制
 #if !defined(NO_MALLOC_USABLE_SIZE) && \
     (defined(__GLIBC__) || defined(__FreeBSD__) || \
      defined(USE_MALLOC_USABLE_SIZE))

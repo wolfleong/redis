@@ -67,7 +67,7 @@ void zlibc_free(void *ptr) {
 /* When using the libc allocator, use a minimum allocation size to match the
  * jemalloc behavior that doesn't return NULL in this case.
  */
-//如果 x > 0 , 则返回 x, 否则返回 long 的字节长度
+//如果 x > 0 , 则返回 x, 否则返回 long 的字节长度(一般是8字节)
 #define MALLOC_MIN_SIZE(x) ((x) > 0 ? (x) : sizeof(long))
 
 /* Explicitly override malloc/free etc when using tcmalloc. */
@@ -328,12 +328,15 @@ void *zrealloc_usable(void *ptr, size_t size, size_t *usable) {
 /* Provide zmalloc_size() for systems where this function is not provided by
  * malloc itself, given that in that case we store a header with this
  * information as the first bytes of every allocation. */
+//如果没有获取内存分配大小的方法
 #ifndef HAVE_MALLOC_SIZE
+//获取指针真实分配内存
 size_t zmalloc_size(void *ptr) {
     void *realptr = (char*)ptr-PREFIX_SIZE;
     size_t size = *((size_t*)realptr);
     return size+PREFIX_SIZE;
 }
+//获取可用内存
 size_t zmalloc_usable_size(void *ptr) {
     return zmalloc_size(ptr)-PREFIX_SIZE;
 }
