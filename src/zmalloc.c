@@ -561,7 +561,7 @@ size_t zmalloc_get_rss(void) {
 }
 #endif
 
-//jemalloc 分配器信息
+//jemalloc 实现 zmalloc_get_allocator_info, set_jemalloc_bg_thread, jemalloc_purge
 #if defined(USE_JEMALLOC)
 
 int zmalloc_get_allocator_info(size_t *allocated,
@@ -606,6 +606,7 @@ int jemalloc_purge() {
     return -1;
 }
 
+//其他分配器, 这三个方法默认不处理
 #else
 
 int zmalloc_get_allocator_info(size_t *allocated,
