@@ -169,7 +169,7 @@ void zfree_no_tcache(void *ptr);
 void *zmalloc_no_tcache(size_t size);
 #endif
 
-//没有获取已分配内存大小的方法, 则声明两个方法给实现类实现
+//没有获取已分配内存大小的方法, 则声明两个函数, 给 zmalloc.c 进行手动实现, 这里有点像java的抽象方法
 #ifndef HAVE_MALLOC_SIZE
 size_t zmalloc_size(void *ptr);
 size_t zmalloc_usable_size(void *ptr);
