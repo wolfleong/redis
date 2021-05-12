@@ -56,7 +56,7 @@ ps:从左到右内存地址是增加的,默认大端模式
 #define __xstr(s) __str(s)
 //将s变成字符串
 #define __str(s) #s
-//分别判断使用tcmalloc库/jemalloc库/苹果库哪个作为底层的malloc函数调用
+//判断是否使用 tcmalloc 库
 #if defined(USE_TCMALLOC)
 //拼接 ZMALLOC_LIB 字符串
 #define ZMALLOC_LIB ("tcmalloc-" __xstr(TC_VERSION_MAJOR) "." __xstr(TC_VERSION_MINOR))
@@ -85,12 +85,13 @@ ps:从左到右内存地址是增加的,默认大端模式
 #error "Newer version of jemalloc required"
 #endif
 
-//mac的库
+//判断是否存在mac库
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 //是否存在获取已分配内存大小的方法
 #define HAVE_MALLOC_SIZE 1
-//获取指针对象分配内存的大小, 为什么需要这个方法呢, zmalloc_size 会返回不包括内存大小头(PREFIX_SIZE)的内存大小
+//获取指针对象分配内存的大小, 为什么需要这个方法呢, zmalloc_size 返回的内存大小包括字节填充的部分
+//zmalloc_size 相当于通用的获取内存大小的方法, 其实现方法是由底层的库决定
 #define zmalloc_size(p) malloc_size(p)
 #endif
 
@@ -102,20 +103,21 @@ ps:从左到右内存地址是增加的,默认大端模式
  * USE_MALLOC_USABLE_SIZE forces use of malloc_usable_size() regardless
  *      of platform.
  */
-//没有声明内存分配的库
+//没有声明 ZMALLOC_LIB, 表示上面指定的内存分配器都不存在
 #ifndef ZMALLOC_LIB
 //定义ZMALLOC_LIB为"libc"
 #define ZMALLOC_LIB "libc"
-//如果存在 malloc_usable_size() 方法
-//malloc_usable_size 是glibc中malloc.h的函数, 这个函数中传入一个指针，返回指针指向的空间实际占用的大小,
-// 这个返回的大小，可能会比使用malloc申请的要大，由于系统的内存对齐或者最小分配限制
+//判断是存在 malloc_usable_size() 方法, 只有满足以下的条件才有
 #if !defined(NO_MALLOC_USABLE_SIZE) && \
     (defined(__GLIBC__) || defined(__FreeBSD__) || \
      defined(USE_MALLOC_USABLE_SIZE))
 #include <malloc.h>
 #define HAVE_MALLOC_SIZE 1
+//malloc_usable_size 函数中传入一个指针，返回指针指向的空间实际占用的大小,
+//这个返回的大小，可能会比使用malloc申请的要大，由于系统的内存对齐或者最小分配限制
 #define zmalloc_size(p) malloc_usable_size(p)
 #endif
+//如果上面的条件都不满足, 默认就是用 ANSI 的 clib 库
 #endif
 
 /* We can enable the Redis defrag capabilities only if we are using Jemalloc
@@ -132,17 +134,24 @@ void *zmalloc(size_t size);
 void *zcalloc(size_t size);
 //重新调用已申请的内存大小为size
 void *zrealloc(void *ptr, size_t size);
+//尝试用 malloc 申请内存
 void *ztrymalloc(size_t size);
+//尝试用 calloc 申请内存
 void *ztrycalloc(size_t size);
 void *ztryrealloc(void *ptr, size_t size);
 //释放内存
 void zfree(void *ptr);
+//malloc分配内存, 并且返回可用内存大小
 void *zmalloc_usable(size_t size, size_t *usable);
+//calloc分配内存, 并且返回可用内存大小
 void *zcalloc_usable(size_t size, size_t *usable);
+//重分配内存, 并且返回可用内存大小
 void *zrealloc_usable(void *ptr, size_t size, size_t *usable);
+//malloc尝试分配, 并且返回可用内存大小
 void *ztrymalloc_usable(size_t size, size_t *usable);
 void *ztrycalloc_usable(size_t size, size_t *usable);
 void *ztryrealloc_usable(void *ptr, size_t size, size_t *usable);
+//释放指针内存, 并且返回释放的内存大小
 void zfree_usable(void *ptr, size_t *usable);
 //字符串复制
 char *zstrdup(const char *s);
@@ -150,13 +159,17 @@ char *zstrdup(const char *s);
 size_t zmalloc_used_memory(void);
 //自定义内存溢出时回调函数
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
-//获取RSS(常驻内存集)大小
+//返回该进程实际消耗的物理内存的大小, 根据各种平台的各种进程命令实现,
 size_t zmalloc_get_rss(void);
+
+//以下三个方法只用 jemalloc 分配器有实现, 其他默认都是不处理
 int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *resident);
 void set_jemalloc_bg_thread(int enable);
 int jemalloc_purge();
-//获取进程私有的内容已经发生更改的内存大小
+
+//实际内存大小
 size_t zmalloc_get_private_dirty(long pid);
+//根据字符获取内存的各种信息, 低层是 smap
 size_t zmalloc_get_smap_bytes_by_field(char *field, long pid);
 //获取物理内存大小
 size_t zmalloc_get_memory_size(void);

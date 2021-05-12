@@ -90,6 +90,7 @@
 
 #include <stdatomic.h>
 #define atomicIncr(var,count) atomic_fetch_add_explicit(&var,(count),memory_order_relaxed)
+//宏定义的 do while(0) 作用是将替换的内容放在{}的作用域, while(0) 表示{}的内容只会执行一次
 #define atomicGetIncr(var,oldvalue_var,count) do { \
     oldvalue_var = atomic_fetch_add_explicit(&var,(count),memory_order_relaxed); \
 } while(0)

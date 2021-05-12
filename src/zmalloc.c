@@ -85,9 +85,9 @@ void zlibc_free(void *ptr) {
 #define dallocx(ptr,flags) je_dallocx(ptr,flags)
 #endif
 
-//增加内存统计
+//增加内存统计, 原子增加
 #define update_zmalloc_stat_alloc(__n) atomicIncr(used_memory,(__n))
-//减少内存统计
+//减少内存统计, 原子减少
 #define update_zmalloc_stat_free(__n) atomicDecr(used_memory,(__n))
 
 //用于统计已使用的内存, 原子性变量
@@ -411,12 +411,15 @@ char *zstrdup(const char *s) {
     return p;
 }
 
+//获取已分配的内存
 size_t zmalloc_used_memory(void) {
     size_t um;
+    //将 used_memory 原子获取并写入到 um 中
     atomicGet(used_memory,um);
     return um;
 }
 
+//设置内存溢出处理器
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {
     zmalloc_oom_handler = oom_handler;
 }
@@ -558,6 +561,7 @@ size_t zmalloc_get_rss(void) {
 }
 #endif
 
+//jemalloc 分配器信息
 #if defined(USE_JEMALLOC)
 
 int zmalloc_get_allocator_info(size_t *allocated,
