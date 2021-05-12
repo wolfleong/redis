@@ -48,6 +48,7 @@ void zlibc_free(void *ptr) {
 #include "zmalloc.h"
 #include "atomicvar.h"
 
+//如果有定义 HAVE_MALLOC_SIZE 变量
 #ifdef HAVE_MALLOC_SIZE
 //PREFIX_SIZE 用于保存指针对象的内存长度, 第三方内存分配器已经存了内存长度, 所以为 0
 #define PREFIX_SIZE (0)
