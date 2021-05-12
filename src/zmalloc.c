@@ -61,7 +61,7 @@ void zlibc_free(void *ptr) {
 #else
 #define PREFIX_SIZE (sizeof(size_t))
 #endif
-//定义ASSERT_NO_SIZE_OVERFLOW方法实, sz表示申请内存的大小, 判断申请内存量+内存大小PREFIX_SIZE 不会溢出
+//定义ASSERT_NO_SIZE_OVERFLOW方法实, sz表示申请内存的大小, 断言 申请内存量+内存大小PREFIX_SIZE 不会溢出
 #define ASSERT_NO_SIZE_OVERFLOW(sz) assert((sz) + PREFIX_SIZE > (sz))
 #endif
 
@@ -71,6 +71,7 @@ void zlibc_free(void *ptr) {
 //如果 x > 0 , 则返回 x, 否则返回 long 的字节长度(一般是8字节)
 #define MALLOC_MIN_SIZE(x) ((x) > 0 ? (x) : sizeof(long))
 
+//统一方法调用的名称, 屏蔽底层名称不一至的问题
 /* Explicitly override malloc/free etc when using tcmalloc. */
 #if defined(USE_TCMALLOC)
 #define malloc(size) tc_malloc(size)
