@@ -33,6 +33,7 @@
 #ifndef __SDS_H
 #define __SDS_H
 
+// 1M = 1024 * 1024 * 1 byte
 #define SDS_MAX_PREALLOC (1024*1024)
 //用于标识, 创建sds时, 不初始化字符数组
 extern const char *SDS_NOINIT;
@@ -279,15 +280,21 @@ sds sdscatprintf(sds s, const char *fmt, ...);
 sds sdscatfmt(sds s, char const *fmt, ...);
 //接受一个SDS和一个字符串作为参数, 从SDS中移除所有在D字符串中出现过的字符
 sds sdstrim(sds s, const char *cset);
+
 void sdsrange(sds s, ssize_t start, ssize_t end);
+//更新sds长度为0
 void sdsupdatelen(sds s);
+//清空sds内空
 void sdsclear(sds s);
 //对比两个sds是否相同
 int sdscmp(const sds s1, const sds s2);
 sds *sdssplitlen(const char *s, ssize_t len, const char *sep, int seplen, int *count);
 void sdsfreesplitres(sds *tokens, int count);
+//字符串变小写
 void sdstolower(sds s);
+//字符串变大小
 void sdstoupper(sds s);
+//将long long 值转成 sds
 sds sdsfromlonglong(long long value);
 sds sdscatrepr(sds s, const char *p, size_t len);
 sds *sdssplitargs(const char *line, int *argc);
@@ -304,10 +311,15 @@ typedef sds (*sdstemplate_callback_t)(const sds variable, void *arg);
 sds sdstemplate(const char *template, sdstemplate_callback_t cb_func, void *cb_arg);
 
 /* Low level functions exposed to the user API */
+//空间预分配, 减少内存重分配次数
 sds sdsMakeRoomFor(sds s, size_t addlen);
+//sds增加长度
 void sdsIncrLen(sds s, ssize_t incr);
+//回收空闲的内存空间
 sds sdsRemoveFreeSpace(sds s);
+//获取sds分配的空间大小
 size_t sdsAllocSize(sds s);
+//获取sds分配内存的指针, 也就是sdsHdr对象的指针
 void *sdsAllocPtr(sds s);
 
 /* Export the allocator used by SDS to the program using SDS.
