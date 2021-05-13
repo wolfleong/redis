@@ -317,7 +317,7 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
     assert(hdrlen + newlen + 1 > len);  /* Catch size_t overflow */
     //如果sds类型不变
     if (oldtype==type) {
-        //直接重分配
+        //直接重分配, 扩展了空间
         newsh = s_realloc_usable(sh, hdrlen+newlen+1, &usable);
         //分配不成功, 则返回 NULL
         if (newsh == NULL) return NULL;
@@ -359,40 +359,65 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
  *
  * After the call, the passed sds string is no longer valid and all the
  * references must be substituted with the new pointer returned by the call. */
+//回收sds空闲的内存空间
 sds sdsRemoveFreeSpace(sds s) {
     void *sh, *newsh;
+    //获取sds的类型
     char type, oldtype = s[-1] & SDS_TYPE_MASK;
+    //获取hdr结构体的大小
     int hdrlen, oldhdrlen = sdsHdrSize(oldtype);
+    //获取sds字符串的长度
     size_t len = sdslen(s);
+    //获取sds剩余长度
     size_t avail = sdsavail(s);
+    //获取sdsHdr旧指针
     sh = (char*)s-oldhdrlen;
 
     /* Return ASAP if there is no space left. */
+    //如果没有剩余空间, 则不处理
     if (avail == 0) return s;
 
     /* Check what would be the minimum SDS header that is just good enough to
      * fit this string. */
+    //根据字符串长度获取sds的新的类型
     type = sdsReqType(len);
+    //根据新的类型获取sdsHdr的结构体大小
     hdrlen = sdsHdrSize(type);
 
     /* If the type is the same, or at least a large enough type is still
      * required, we just realloc(), letting the allocator to do the copy
      * only if really needed. Otherwise if the change is huge, we manually
      * reallocate the string to use the different header type. */
+    //为什么类型大于 8 , 还是 realloc 呢, 这里有性能优化, realloc 相对 malloc 来说, realloc 更节省性能, realloc 只是将已分配的内存减少一下就行
+    //如果结构体的类型不变, 或者 type 大于 SDS_TYPE_8
     if (oldtype==type || type > SDS_TYPE_8) {
+        //直接在原指针上重分配内存, 只保留字符串长度的内存空间, 压缩了空间
         newsh = s_realloc(sh, oldhdrlen+len+1);
+        //分配失败, 则返回 NULL
         if (newsh == NULL) return NULL;
+        //返回新的sds指针
         s = (char*)newsh+oldhdrlen;
     } else {
+        //只有变化很大的情况, 才去 malloc, 变化小都直接 realloc
+        //oldtype != type && type == SDS_TYPE_8
+        //根据新的类型长度分配内存
         newsh = s_malloc(hdrlen+len+1);
+        //分配失败, 则返回 NULL
         if (newsh == NULL) return NULL;
+        //将内容拷贝到新的内存中
         memcpy((char*)newsh+hdrlen, s, len+1);
+        //释放原来的sdsHdr指针
         s_free(sh);
+        //获取新的 sdsHdr 指针
         s = (char*)newsh+hdrlen;
+        //设置 flag 属性
         s[-1] = type;
+        //设置sds字符串长度
         sdssetlen(s, len);
     }
+    //设置已分配容量大小
     sdssetalloc(s, len);
+    //返回 sds
     return s;
 }
 
@@ -502,13 +527,20 @@ sds sdsgrowzero(sds s, size_t len) {
  * After the call, the passed sds string is no longer valid and all the
  * references must be substituted with the new pointer returned by the call. */
 sds sdscatlen(sds s, const void *t, size_t len) {
+    //获取当前sds字符串的长度
     size_t curlen = sdslen(s);
 
+    //如果sds空间不够则扩展
     s = sdsMakeRoomFor(s,len);
+    //如果没扩展成功, 则返回 NULL
     if (s == NULL) return NULL;
+    //将新的内容拼接到sds中
     memcpy(s+curlen, t, len);
+    //重新设置sds的长度
     sdssetlen(s, curlen+len);
+    //设置结束符
     s[curlen+len] = '\0';
+    //返回新的 sds
     return s;
 }
 
@@ -531,12 +563,17 @@ sds sdscatsds(sds s, const sds t) {
 /* Destructively modify the sds string 's' to hold the specified binary
  * safe string pointed by 't' of length 'len' bytes. */
 sds sdscpylen(sds s, const char *t, size_t len) {
+    //如果sds的容量小于拷贝字符串的长度
     if (sdsalloc(s) < len) {
+        //扩展sds容量
         s = sdsMakeRoomFor(s,len-sdslen(s));
         if (s == NULL) return NULL;
     }
+    //将内容拷贝到 sds 中
     memcpy(s, t, len);
+    //设置结束符
     s[len] = '\0';
+    //重新设置长度
     sdssetlen(s, len);
     return s;
 }

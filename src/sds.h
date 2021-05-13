@@ -225,7 +225,7 @@ static inline size_t sdsalloc(const sds s) {
     return 0;
 }
 
-//重置数组分配的大小
+//重置sds已分配容量的大小
 static inline void sdssetalloc(sds s, size_t newlen) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -260,15 +260,18 @@ sds sdsdup(const sds s);
 void sdsfree(sds s);
 //用空字符串扩展sds的长度
 sds sdsgrowzero(sds s, size_t len);
+//将二进制安全的字符串附加到现有的 buf 数组之后
 sds sdscatlen(sds s, const void *t, size_t len);
 //sds拼接字符串
 sds sdscat(sds s, const char *t);
 //拼接两sds
 sds sdscatsds(sds s, const sds t);
+//丢弃 sds 字符数组中的原内容，将长为 len 的字符串拷贝至 sds 的 buf 中
 sds sdscpylen(sds s, const char *t, size_t len);
 //将给定的C字符串复制到sds里面, 覆盖SDS原有的字符串
 sds sdscpy(sds s, const char *t);
 
+//将格式化字符串拼接到 sds 之后
 sds sdscatvprintf(sds s, const char *fmt, va_list ap);
 #ifdef __GNUC__
 sds sdscatprintf(sds s, const char *fmt, ...)
@@ -280,15 +283,17 @@ sds sdscatprintf(sds s, const char *fmt, ...);
 sds sdscatfmt(sds s, char const *fmt, ...);
 //接受一个SDS和一个字符串作为参数, 从SDS中移除所有在D字符串中出现过的字符
 sds sdstrim(sds s, const char *cset);
-
+//依据 start 和 end 索引下标修剪 sds 字符串
 void sdsrange(sds s, ssize_t start, ssize_t end);
-//更新sds长度为0
+//更新sds长度
 void sdsupdatelen(sds s);
 //清空sds内空
 void sdsclear(sds s);
 //对比两个sds是否相同
 int sdscmp(const sds s1, const sds s2);
+//使用长为 seplen 的二进制安全字符串 sep 作为分隔符，将长为 len 的二进制安全字符串 s 分割成 count 个 sds 字符串
 sds *sdssplitlen(const char *s, ssize_t len, const char *sep, int seplen, int *count);
+//释放 sdssplitlen 生成的动态数组的内存
 void sdsfreesplitres(sds *tokens, int count);
 //字符串变小写
 void sdstolower(sds s);
@@ -296,10 +301,15 @@ void sdstolower(sds s);
 void sdstoupper(sds s);
 //将long long 值转成 sds
 sds sdsfromlonglong(long long value);
+//处理特殊字符, 非打印字符会转成16进制打印, 相当于将字符串变成可打印的
 sds sdscatrepr(sds s, const char *p, size_t len);
+//解析命令行参数, 返回sds数组和参数个数
 sds *sdssplitargs(const char *line, int *argc);
+//遍历 sds 字符串，将在字符串 from 中出现的字符替换成 to 中对应位置的字符
 sds sdsmapchars(sds s, const char *from, const char *to, size_t setlen);
+//使用 C 风格字符串 sep 作为分隔符，将 C 风格字符串数组拼接为一个 sds
 sds sdsjoin(char **argv, int argc, char *sep);
+//以 sep 字符串为分割符, 将sds数组拼接成字符串
 sds sdsjoinsds(sds *argv, int argc, const char *sep, size_t seplen);
 
 /* Callback for sdstemplate. The function gets called by sdstemplate
@@ -307,7 +317,9 @@ sds sdsjoinsds(sds *argv, int argc, const char *sep, size_t seplen);
  * provided as variable, and the callback is expected to return a
  * substitution value. Returning a NULL indicates an error.
  */
+//模版中变量的处理函数指针
 typedef sds (*sdstemplate_callback_t)(const sds variable, void *arg);
+//处理字符串模板, 如: "my name is {1}"
 sds sdstemplate(const char *template, sdstemplate_callback_t cb_func, void *cb_arg);
 
 /* Low level functions exposed to the user API */
@@ -315,7 +327,7 @@ sds sdstemplate(const char *template, sdstemplate_callback_t cb_func, void *cb_a
 sds sdsMakeRoomFor(sds s, size_t addlen);
 //sds增加长度
 void sdsIncrLen(sds s, ssize_t incr);
-//回收空闲的内存空间
+//回收sds空闲的内存空间
 sds sdsRemoveFreeSpace(sds s);
 //获取sds分配的空间大小
 size_t sdsAllocSize(sds s);
