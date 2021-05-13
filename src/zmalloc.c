@@ -105,6 +105,7 @@ static void zmalloc_default_oom(size_t size) {
     abort();
 }
 
+//内存溢出的函数指针
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
 //尝试分配内存, 分配不了则返回 NULL
@@ -252,6 +253,7 @@ void *ztryrealloc_usable(void *ptr, size_t size, size_t *usable) {
         return NULL;
     }
     //如果指针为空, 则直接尝试分配内存
+    //这里size是可以为0的
     /* Not freeing anything, just redirect to malloc. */
     if (ptr == NULL)
         return ztrymalloc_usable(size, usable);
@@ -306,10 +308,14 @@ void *ztryrealloc_usable(void *ptr, size_t size, size_t *usable) {
 #endif
 }
 
+//内存重分配方法, 分配不成功则报内存溢出
 /* Reallocate memory and zero it or panic */
 void *zrealloc(void *ptr, size_t size) {
+    //调用 ztryrealloc_usable() 方法进行重分配
     ptr = ztryrealloc_usable(ptr, size, NULL);
+    //如果指针不存在且要分配的内存大于0, 则报内存溢出
     if (!ptr && size != 0) zmalloc_oom_handler(size);
+    //返回重分配后的指针
     return ptr;
 }
 
