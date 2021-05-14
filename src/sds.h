@@ -43,6 +43,7 @@ extern const char *SDS_NOINIT;
 #include <stdint.h>
 
 //为字符数组定义别名, 为sds
+//如果不这样起别名的话, 字符串数组就不好表示了, 如: char **, 有别名的话, 就可以用 sds * 来表示了
 typedef char *sds;
 
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
@@ -88,8 +89,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
     char buf[];
 };
 
-//宏定义中, 用#于把宏参数变成一个字符串, 用##把两个宏参数粘合在一起
-
+//flags 的5种类型值
 #define SDS_TYPE_5  0
 #define SDS_TYPE_8  1
 #define SDS_TYPE_16 2
@@ -98,6 +98,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 //低三位的掩码,  也就是 00000111
 #define SDS_TYPE_MASK 7
 #define SDS_TYPE_BITS 3
+//宏定义中, 用#于把宏参数变成一个字符串, 用##把两个宏参数粘合在一起
 //获取 sdshdr 引用地址, 并且将地址放到 sh 变量中
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
 //这里为什么 s - sizeof(struct sdshdr##T) 就能得到 sdshdr##T 呢
