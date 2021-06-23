@@ -39,13 +39,18 @@
  * listSetFreeMethod.
  *
  * On error, NULL is returned. Otherwise the pointer to the new list. */
+//创建空链表
 list *listCreate(void)
 {
+    //声明链表
     struct list *list;
 
+    //分配链表内存
     if ((list = zmalloc(sizeof(*list))) == NULL)
         return NULL;
+    //初始化首节点与尾节点都为空
     list->head = list->tail = NULL;
+    //设置长度为 0
     list->len = 0;
     list->dup = NULL;
     list->free = NULL;
@@ -54,29 +59,45 @@ list *listCreate(void)
 }
 
 /* Remove all the elements from the list without destroying the list itself. */
+//清空链表元素, 不回收链表对象的内存
 void listEmpty(list *list)
 {
+    //链表当前长度
     unsigned long len;
+    //current 当前遍历指针
+    //next 下一个节点的指针
     listNode *current, *next;
 
+    //获取首节点
     current = list->head;
+    //获取链表长度
     len = list->len;
+    //按长度遍历
     while(len--) {
+        //获取下一个节点
         next = current->next;
+        //如果有指定释放内存的函数, 则调用函数释放节点的值
         if (list->free) list->free(current->value);
+        //释放节点内存
         zfree(current);
+        //当前指针替换成下一个节点
         current = next;
     }
+    //首节点和尾节点置 NULL
     list->head = list->tail = NULL;
+    //长度设置为 0
     list->len = 0;
 }
 
 /* Free the whole list.
  *
  * This function can't fail. */
+//释放链表内存
 void listRelease(list *list)
 {
+    //清空链表
     listEmpty(list);
+    //释放链表内存
     zfree(list);
 }
 
@@ -86,23 +107,31 @@ void listRelease(list *list)
  * On error, NULL is returned and no operation is performed (i.e. the
  * list remains unaltered).
  * On success the 'list' pointer you pass to the function is returned. */
+//前首节点前面添加节点
 list *listAddNodeHead(list *list, void *value)
 {
+    //节点指针
     listNode *node;
 
+    //分配节点内存, 分配不了则直接返回 NULL
     if ((node = zmalloc(sizeof(*node))) == NULL)
         return NULL;
+    //设置节点的值
     node->value = value;
+    //如果链表长度为0 , 则表示链表为空, 直接指定首节点和尾节点
     if (list->len == 0) {
         list->head = list->tail = node;
         node->prev = node->next = NULL;
     } else {
+        //设置当前节点为首节点, 并且加入链表中
         node->prev = NULL;
         node->next = list->head;
         list->head->prev = node;
         list->head = node;
     }
+    //链表长度加 1
     list->len++;
+    //返回链表
     return list;
 }
 

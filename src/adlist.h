@@ -33,60 +33,104 @@
 
 /* Node, List, and Iterator are the only data structures used currently. */
 
+//链表节点的结构体
 typedef struct listNode {
+    //前一个节点的引用
     struct listNode *prev;
+    //下一个节点的引用
     struct listNode *next;
+    //当前节点的值, 相当于 Object 类型
     void *value;
 } listNode;
 
+//链表迭代器
 typedef struct listIter {
+    //迭代的当前节点
     listNode *next;
+    //迭代方向, 可以向前或者向后
     int direction;
 } listIter;
 
+//链表结构体
 typedef struct list {
+    //链表首节点
     listNode *head;
+    //链表尾节点
     listNode *tail;
+    //结构体的函数相当于多态, 由具体的对象提供对应的函数实现
+    //链表复制指定节点的value的值
     void *(*dup)(void *ptr);
+    //链表释放指定节点的value的内存的函数
     void (*free)(void *ptr);
+    //匹配函数
     int (*match)(void *ptr, void *key);
+    //链表长度
     unsigned long len;
 } list;
 
 /* Functions implemented as macros */
+//获取链表长度
 #define listLength(l) ((l)->len)
+//获取链表第一个节点
 #define listFirst(l) ((l)->head)
+//获取链表最后一个节点
 #define listLast(l) ((l)->tail)
+//获取链表前一个节点
 #define listPrevNode(n) ((n)->prev)
+//获取链表后一个节点
 #define listNextNode(n) ((n)->next)
+//获取链表节点的值
 #define listNodeValue(n) ((n)->value)
 
+//设置链表的复制函数
 #define listSetDupMethod(l,m) ((l)->dup = (m))
+//设置链表结构体的释放函数
 #define listSetFreeMethod(l,m) ((l)->free = (m))
+//设置链表结构体的匹配函数
 #define listSetMatchMethod(l,m) ((l)->match = (m))
 
+//获取链表的复制函数
 #define listGetDupMethod(l) ((l)->dup)
+//获取链表的释放函数
 #define listGetFreeMethod(l) ((l)->free)
+//获取链表的匹配函数
 #define listGetMatchMethod(l) ((l)->match)
 
 /* Prototypes */
+//链表创建函数
 list *listCreate(void);
+//链表释放
 void listRelease(list *list);
+//清空链表
 void listEmpty(list *list);
+//添加节点到头部
 list *listAddNodeHead(list *list, void *value);
+//添加节点到尾部
 list *listAddNodeTail(list *list, void *value);
+
+//指定位置插入节点
 list *listInsertNode(list *list, listNode *old_node, void *value, int after);
+//删除节点
 void listDelNode(list *list, listNode *node);
+//获取节点迭代器
 listIter *listGetIterator(list *list, int direction);
+//获取迭代器下一个节点
 listNode *listNext(listIter *iter);
+//释放迭代器
 void listReleaseIterator(listIter *iter);
+//复制链表
 list *listDup(list *orig);
+//根据 key值查找节点
 listNode *listSearchKey(list *list, void *key);
+//根据索引获取节点
 listNode *listIndex(list *list, long index);
 void listRewind(list *list, listIter *li);
 void listRewindTail(list *list, listIter *li);
+//头向尾旋转
 void listRotateTailToHead(list *list);
+//尾向头旋转
 void listRotateHeadToTail(list *list);
+//合并两个链表
 void listJoin(list *l, list *o);
 
 /* Directions for iterators */
