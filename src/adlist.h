@@ -45,7 +45,7 @@ typedef struct listNode {
 
 //链表迭代器
 typedef struct listIter {
-    //迭代的当前节点
+    //当前遍历节点
     listNode *next;
     //迭代方向, 可以向前或者向后
     int direction;
@@ -58,11 +58,11 @@ typedef struct list {
     //链表尾节点
     listNode *tail;
     //结构体的函数相当于多态, 由具体的对象提供对应的函数实现
-    //链表复制指定节点的value的值
+    //链表复制指定节点的value的值, 值如果是结构体, 则需要对应的函数来拷贝
     void *(*dup)(void *ptr);
-    //链表释放指定节点的value的内存的函数
+    //链表释放指定节点的value的内存的函数, 值如果是结构体, 则需要对应的函数释放内存
     void (*free)(void *ptr);
-    //匹配函数
+    //值的比较函数, 相当于 java 的equals, 用于比较结构体
     int (*match)(void *ptr, void *key);
     //链表长度
     unsigned long len;
@@ -124,17 +124,21 @@ list *listDup(list *orig);
 listNode *listSearchKey(list *list, void *key);
 //根据索引获取节点
 listNode *listIndex(list *list, long index);
+//设置迭代器, 指定链表从head开始遍历
 void listRewind(list *list, listIter *li);
+//设置迭代器, 指定链表从tail开始遍历
 void listRewindTail(list *list, listIter *li);
-//头向尾旋转
+//反转链表, 将尾变头
 void listRotateTailToHead(list *list);
-//尾向头旋转
+//反转链表, 将头变尾
 void listRotateHeadToTail(list *list);
-//合并两个链表
+//合并指定链表o到l中
 void listJoin(list *l, list *o);
 
 /* Directions for iterators */
+//前面开始遍历
 #define AL_START_HEAD 0
+//后面开始遍历
 #define AL_START_TAIL 1
 
 #endif /* __ADLIST_H__ */
