@@ -62,7 +62,7 @@ typedef struct list {
     void *(*dup)(void *ptr);
     //链表释放指定节点的value的内存的函数, 值如果是结构体, 则需要对应的函数释放内存
     void (*free)(void *ptr);
-    //值的比较函数, 相当于 java 的equals, 用于比较结构体
+    //值的比较函数, 相当于 java 的equals, 用于比较结构体是否相等
     int (*match)(void *ptr, void *key);
     //链表长度
     unsigned long len;
@@ -103,14 +103,14 @@ list *listCreate(void);
 void listRelease(list *list);
 //清空链表
 void listEmpty(list *list);
-//添加节点到头部
+//添加节点到链表头
 list *listAddNodeHead(list *list, void *value);
-//添加节点到尾部
+//添加节点到链表尾
 list *listAddNodeTail(list *list, void *value);
 
-//指定位置插入节点
+//根据原有节点指定位置插入新节点
 list *listInsertNode(list *list, listNode *old_node, void *value, int after);
-//删除节点
+//删除指定节点
 void listDelNode(list *list, listNode *node);
 //获取节点迭代器
 listIter *listGetIterator(list *list, int direction);
@@ -120,7 +120,7 @@ listNode *listNext(listIter *iter);
 void listReleaseIterator(listIter *iter);
 //复制链表
 list *listDup(list *orig);
-//根据 key值查找节点
+//根据 key 值查找节点
 listNode *listSearchKey(list *list, void *key);
 //根据索引获取节点
 listNode *listIndex(list *list, long index);
@@ -128,11 +128,11 @@ listNode *listIndex(list *list, long index);
 void listRewind(list *list, listIter *li);
 //设置迭代器, 指定链表从tail开始遍历
 void listRewindTail(list *list, listIter *li);
-//反转链表, 将尾变头
+//将链表尾节点变头节点
 void listRotateTailToHead(list *list);
-//反转链表, 将头变尾
+//将链表头节点变尾节点
 void listRotateHeadToTail(list *list);
-//合并指定链表o到l中
+//将链表o拼接到链表l后面
 void listJoin(list *l, list *o);
 
 /* Directions for iterators */

@@ -107,7 +107,7 @@ void listRelease(list *list)
  * On error, NULL is returned and no operation is performed (i.e. the
  * list remains unaltered).
  * On success the 'list' pointer you pass to the function is returned. */
-//添加节点到头部
+//添加节点到链表头
 list *listAddNodeHead(list *list, void *value)
 {
     //节点指针
@@ -141,7 +141,7 @@ list *listAddNodeHead(list *list, void *value)
  * On error, NULL is returned and no operation is performed (i.e. the
  * list remains unaltered).
  * On success the 'list' pointer you pass to the function is returned. */
-//添加节点到尾部
+//添加节点到链表尾
 list *listAddNodeTail(list *list, void *value)
 {
     //声明节点
@@ -175,7 +175,7 @@ list *listAddNodeTail(list *list, void *value)
     return list;
 }
 
-//根据旧节点指定位置插入新节点
+//根据原有节点指定位置插入新节点
 list *listInsertNode(list *list, listNode *old_node, void *value, int after) {
     //声明新的节点
     listNode *node;
@@ -449,7 +449,7 @@ listNode *listIndex(list *list, long index) {
 }
 
 /* Rotate the list removing the tail node and inserting it to the head. */
-//反转链表, 将尾变头
+//将链表尾节点变头节点
 void listRotateTailToHead(list *list) {
     //长度小于等于一个节点, 不处理
     if (listLength(list) <= 1) return;
@@ -490,7 +490,7 @@ void listRotateHeadToTail(list *list) {
 
 /* Add all the elements of the list 'o' at the end of the
  * list 'l'. The list 'other' remains empty but otherwise valid. */
-//合并指定链表o到l中
+//将链表o拼接到链表l后面
 void listJoin(list *l, list *o) {
     //如果要合并的链表长度为 0, 则不处理
     if (o->len == 0) return;
