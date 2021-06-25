@@ -47,40 +47,60 @@
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
 
+//字典的节点
 typedef struct dictEntry {
+    //节点的key
     void *key;
+    //节点的值 v , v 可以是指针, 也可以是uint64整数, 也可以是int64整数, 还可以是浮点数
     union {
         void *val;
         uint64_t u64;
         int64_t s64;
         double d;
     } v;
+    //下一个节点
     struct dictEntry *next;
 } dictEntry;
 
 typedef struct dictType {
+    //键的hash函数
     uint64_t (*hashFunction)(const void *key);
+    //复制键的函数
     void *(*keyDup)(void *privdata, const void *key);
+    //值的复制函数
     void *(*valDup)(void *privdata, const void *obj);
+    //键的比较函数
     int (*keyCompare)(void *privdata, const void *key1, const void *key2);
+    //键的销毁函数
     void (*keyDestructor)(void *privdata, void *key);
+    //值的销毁函数
     void (*valDestructor)(void *privdata, void *obj);
     int (*expandAllowed)(size_t moreMem, double usedRatio);
 } dictType;
 
 /* This is our hash table structure. Every dictionary has two of this as we
  * implement incremental rehashing, for the old to the new table. */
+//hash字典结构体
 typedef struct dictht {
+    //hash表的指针数组, dictEntry * 表示hash节点的指针, 再加一个 *, 也就是dictEntry ** 表示数组的首地址
     dictEntry **table;
+    //hash数组大小, 一般为 2^n
     unsigned long size;
+    //hash数组长度掩码, sizemask =  size - 1
     unsigned long sizemask;
+    //hash字典的kv对的个数
     unsigned long used;
 } dictht;
 
+//字典的结构体
 typedef struct dict {
+    //字段类型的指针
     dictType *type;
+    //携带的私有数据
     void *privdata;
+    //hash字典的数组, 长度为2, 主要是用于渐式hash时使用
     dictht ht[2];
+    //rehash 不进行时为 -1
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
 } dict;
@@ -89,8 +109,11 @@ typedef struct dict {
  * dictAdd, dictFind, and other functions against the dictionary even while
  * iterating. Otherwise it is a non safe iterator, and only dictNext()
  * should be called while iterating. */
+//hash字段的迭代器
 typedef struct dictIterator {
+    //字典的指针
     dict *d;
+    //数组下标
     long index;
     int table, safe;
     dictEntry *entry, *nextEntry;
@@ -102,6 +125,7 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 
 /* This is the initial size of every hash table */
+//hash表初始化大小
 #define DICT_HT_INITIAL_SIZE     4
 
 /* ------------------------------- Macros ------------------------------------*/
@@ -149,6 +173,7 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 #define dictGetDoubleVal(he) ((he)->v.d)
 #define dictSlots(d) ((d)->ht[0].size+(d)->ht[1].size)
 #define dictSize(d) ((d)->ht[0].used+(d)->ht[1].used)
+//判断字段是否在 rehash 中
 #define dictIsRehashing(d) ((d)->rehashidx != -1)
 #define dictPauseRehashing(d) (d)->pauserehash++
 #define dictResumeRehashing(d) (d)->pauserehash--

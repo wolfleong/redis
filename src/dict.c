@@ -51,6 +51,11 @@
 #include <assert.h>
 #endif
 
+//static 关键字的理解, https://zhuanlan.zhihu.com/p/112027143
+//1. static 修饰局部变量, 此变量只能在作用域内访问, 但是变量存储在静态区, 函数执行完后变量不会销毁. 普通局部变量在函数执行完后, 立即销毁
+//2. static 修饰全局变量, 表示此变量只能在当前文件内访问
+//3. static 修饰函数, 表示此函数只能在当前文件内访问
+
 /* Using dictEnableResize() / dictDisableResize() we make possible to
  * enable/disable resizing of the hash table as needed. This is very important
  * for Redis, as we use copy-on-write and don't want to move too much memory
@@ -59,7 +64,9 @@
  * Note that even when dict_can_resize is set to 0, not all resizes are
  * prevented: a hash table is still allowed to grow if the ratio between
  * the number of elements and the buckets > dict_force_resize_ratio. */
+//字典是否可以调整大小
 static int dict_can_resize = 1;
+//hash表扩容因子
 static unsigned int dict_force_resize_ratio = 5;
 
 /* -------------------------- private prototypes ---------------------------- */
@@ -99,6 +106,7 @@ uint64_t dictGenCaseHashFunction(const unsigned char *buf, int len) {
 
 /* Reset a hash table already initialized with ht_init().
  * NOTE: This function should only be called by ht_destroy(). */
+//hash字典重置
 static void _dictReset(dictht *ht)
 {
     ht->table = NULL;
@@ -108,23 +116,33 @@ static void _dictReset(dictht *ht)
 }
 
 /* Create a new hash table */
+//创建空字典的指针
 dict *dictCreate(dictType *type,
         void *privDataPtr)
 {
+    //分配字典内存
     dict *d = zmalloc(sizeof(*d));
 
+    //初始化字典
     _dictInit(d,type,privDataPtr);
+    //返回字段指针
     return d;
 }
 
 /* Initialize the hash table */
+//初始化hash表
 int _dictInit(dict *d, dictType *type,
         void *privDataPtr)
 {
+    //重置第0个hash表
     _dictReset(&d->ht[0]);
+    //重置第1个hash表
     _dictReset(&d->ht[1]);
+    //设置字典类型
     d->type = type;
+    //设置私有数据
     d->privdata = privDataPtr;
+    //不进行rehash时, 为-1
     d->rehashidx = -1;
     d->pauserehash = 0;
     return DICT_OK;
@@ -132,70 +150,98 @@ int _dictInit(dict *d, dictType *type,
 
 /* Resize the table to the minimal size that contains all the elements,
  * but with the invariant of a USED/BUCKETS ratio near to <= 1 */
+//字典表调整大小
 int dictResize(dict *d)
 {
+    //字段数组最小长度
     unsigned long minimal;
 
+    //如果字段不可以调整大小或正在rehash, 则返回错误
     if (!dict_can_resize || dictIsRehashing(d)) return DICT_ERR;
+    //获取hash表的元素数量
     minimal = d->ht[0].used;
+    //如果元素数量小于最小初始化大小
     if (minimal < DICT_HT_INITIAL_SIZE)
+        //则默认用初始化大小
         minimal = DICT_HT_INITIAL_SIZE;
+    //字典扩容
     return dictExpand(d, minimal);
 }
 
 /* Expand or create the hash table,
  * when malloc_failed is non-NULL, it'll avoid panic if malloc fails (in which case it'll be set to 1).
  * Returns DICT_OK if expand was performed, and DICT_ERR if skipped. */
+//扩容或者创建字典
 int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
 {
     if (malloc_failed) *malloc_failed = 0;
 
     /* the size is invalid if it is smaller than the number of
      * elements already inside the hash table */
+    //如果字典正在rehash, 或者已有节点数大于扩容数组的大小, 则直接返回错误
     if (dictIsRehashing(d) || d->ht[0].used > size)
         return DICT_ERR;
 
     dictht n; /* the new hash table */
+    //计算要扩容的容量
     unsigned long realsize = _dictNextPower(size);
 
     /* Rehashing to the same table size is not useful. */
+    //如果要扩容的容量跟原来的一样, 则返回错误
     if (realsize == d->ht[0].size) return DICT_ERR;
 
     /* Allocate the new hash table and initialize all pointers to NULL */
+    //设置新的容量
     n.size = realsize;
     n.sizemask = realsize-1;
+    //如果要避免分配失败报错
     if (malloc_failed) {
+        //尝试分配hash数组
         n.table = ztrycalloc(realsize*sizeof(dictEntry*));
+        //设置是否分配失败, n.table == NULL 就是分配失败
         *malloc_failed = n.table == NULL;
+        //如果分配失败, 则返回错误
         if (*malloc_failed)
             return DICT_ERR;
     } else
+        //分配hash数组, 分配失败则终止程序
         n.table = zcalloc(realsize*sizeof(dictEntry*));
 
+    //设置节点数为0
     n.used = 0;
 
     /* Is this the first initialization? If so it's not really a rehashing
      * we just set the first hash table so that it can accept keys. */
+    //如果字典的hash表为 NULL, 则表示这是首次初始化
     if (d->ht[0].table == NULL) {
+        //将hash表放到hash数组中第0位中
         d->ht[0] = n;
         return DICT_OK;
     }
 
+    //如果非首次初始化, 则放到hash数组第1位, 用于rehash
     /* Prepare a second hash table for incremental rehashing */
     d->ht[1] = n;
+    //设置从hash表中的第0位进行迁移
     d->rehashidx = 0;
+    //返回成功
     return DICT_OK;
 }
 
+//如果扩容失败, 报内存溢出
 /* return DICT_ERR if expand was not performed */
 int dictExpand(dict *d, unsigned long size) {
     return _dictExpand(d, size, NULL);
 }
 
+//字典尝试扩容, 扩容失败则返回错误
 /* return DICT_ERR if expand failed due to memory allocation failure */
 int dictTryExpand(dict *d, unsigned long size) {
+    //是否失败
     int malloc_failed;
+    //扩容
     _dictExpand(d, size, &malloc_failed);
+    //如果失败, 则返回错误, 否则返回成功
     return malloc_failed? DICT_ERR : DICT_OK;
 }
 
@@ -1005,12 +1051,16 @@ static int _dictExpandIfNeeded(dict *d)
     return DICT_OK;
 }
 
+//保证hash数组的长度为 2^n 次方
 /* Our hash table capability is a power of two */
 static unsigned long _dictNextPower(unsigned long size)
 {
+    //从最小初始化长度开始
     unsigned long i = DICT_HT_INITIAL_SIZE;
 
+    //最大扩张到 LONG_MAX + 1LU
     if (size >= LONG_MAX) return LONG_MAX + 1LU;
+    //循环, 一直找到大于等于 size 的最小的 2^n 的数
     while(1) {
         if (i >= size)
             return i;
