@@ -75,6 +75,7 @@ typedef struct dictType {
     void (*keyDestructor)(void *privdata, void *key);
     //值的销毁函数
     void (*valDestructor)(void *privdata, void *obj);
+    //根据扩容后的数组的内存和负载因子判断是否可以扩容
     int (*expandAllowed)(size_t moreMem, double usedRatio);
 } dictType;
 
@@ -102,6 +103,7 @@ typedef struct dict {
     dictht ht[2];
     //rehash 不进行时为 -1
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    // pauserehash > 0 表示 rehash 是暂停的
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
 } dict;
 
@@ -125,14 +127,16 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 
 /* This is the initial size of every hash table */
-//hash表初始化大小
+//hash表最小初始化大小
 #define DICT_HT_INITIAL_SIZE     4
 
 /* ------------------------------- Macros ------------------------------------*/
+//释放val值的内存. 如果val的释放函数存在, 则调用函数进行释放
 #define dictFreeVal(d, entry) \
     if ((d)->type->valDestructor) \
         (d)->type->valDestructor((d)->privdata, (entry)->v.val)
 
+//设置一个值到 entry 中. 如果有复制函数, 则用复制函数复制一个值进行赋值, 否则直接赋值
 #define dictSetVal(d, entry, _val_) do { \
     if ((d)->type->valDup) \
         (entry)->v.val = (d)->type->valDup((d)->privdata, _val_); \
@@ -140,19 +144,24 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
         (entry)->v.val = (_val_); \
 } while(0)
 
+//回收u_int64类型val的内存
 #define dictSetSignedIntegerVal(entry, _val_) \
     do { (entry)->v.s64 = _val_; } while(0)
 
+//回收u_int64类型val的内存
 #define dictSetUnsignedIntegerVal(entry, _val_) \
     do { (entry)->v.u64 = _val_; } while(0)
 
+//回收double类型val的内存
 #define dictSetDoubleVal(entry, _val_) \
     do { (entry)->v.d = _val_; } while(0)
 
+//回收key的内存
 #define dictFreeKey(d, entry) \
     if ((d)->type->keyDestructor) \
         (d)->type->keyDestructor((d)->privdata, (entry)->key)
 
+//设置key到 dictEntry 中. 如果有复制函数, 则复制key再赋值, 否则直接赋值
 #define dictSetKey(d, entry, _key_) do { \
     if ((d)->type->keyDup) \
         (entry)->key = (d)->type->keyDup((d)->privdata, _key_); \
@@ -160,22 +169,33 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
         (entry)->key = (_key_); \
 } while(0)
 
+//比较key是否相等, 如果key比较函数存在, 则用函数比较, 否则使用 == 比较
 #define dictCompareKeys(d, key1, key2) \
     (((d)->type->keyCompare) ? \
         (d)->type->keyCompare((d)->privdata, key1, key2) : \
         (key1) == (key2))
 
+//计算字典的键的hash值
 #define dictHashKey(d, key) (d)->type->hashFunction(key)
+//获取节点的键
 #define dictGetKey(he) ((he)->key)
+//获取节点值
 #define dictGetVal(he) ((he)->v.val)
+//获取节点的 int_64 的值
 #define dictGetSignedIntegerVal(he) ((he)->v.s64)
+//获取节点的u_int64的值
 #define dictGetUnsignedIntegerVal(he) ((he)->v.u64)
+//获取节点的double类型的值
 #define dictGetDoubleVal(he) ((he)->v.d)
+//获取hash数组的大小
 #define dictSlots(d) ((d)->ht[0].size+(d)->ht[1].size)
+//获取点节的数量
 #define dictSize(d) ((d)->ht[0].used+(d)->ht[1].used)
 //判断字段是否在 rehash 中
 #define dictIsRehashing(d) ((d)->rehashidx != -1)
+//字典rehash设置停顿
 #define dictPauseRehashing(d) (d)->pauserehash++
+//字段rehash设置取消停顿
 #define dictResumeRehashing(d) (d)->pauserehash--
 
 /* If our unsigned long type can store a 64 bit number, use a 64 bit PRNG. */
@@ -186,9 +206,13 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 #endif
 
 /* API */
+//创建字典, hash数组是空的
 dict *dictCreate(dictType *type, void *privDataPtr);
+//扩容字典, 如果hash数组没创建, 则进行创建, 创建失败则报内存溢出
 int dictExpand(dict *d, unsigned long size);
+//尝试扩容, 扩容失败则返回错误
 int dictTryExpand(dict *d, unsigned long size);
+//字典添加kv
 int dictAdd(dict *d, void *key, void *val);
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
 dictEntry *dictAddOrFind(dict *d, void *key);
@@ -213,6 +237,7 @@ uint64_t dictGenCaseHashFunction(const unsigned char *buf, int len);
 void dictEmpty(dict *d, void(callback)(void*));
 void dictEnableResize(void);
 void dictDisableResize(void);
+//字典rehash
 int dictRehash(dict *d, int n);
 int dictRehashMilliseconds(dict *d, int ms);
 void dictSetHashFunctionSeed(uint8_t *seed);
