@@ -101,7 +101,7 @@ typedef struct dict {
     void *privdata;
     //hash字典的数组, 长度为2, 主要是用于渐式hash时使用
     dictht ht[2];
-    //rehash 不进行时为 -1
+    //rehash下一个要迁移的桶索引, rehash 不进行时为 -1
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
     // pauserehash > 0 表示 rehash 是暂停的
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
@@ -214,16 +214,25 @@ int dictExpand(dict *d, unsigned long size);
 int dictTryExpand(dict *d, unsigned long size);
 //字典添加kv
 int dictAdd(dict *d, void *key, void *val);
+//根据key创建新的节点, 如果存在则返回 NULL
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
+//根据key添加一个节点, 如果存在则直接返回已存在的
 dictEntry *dictAddOrFind(dict *d, void *key);
+//如果节点不存在, 则添加, 如果节点存在, 则覆盖值
 int dictReplace(dict *d, void *key, void *val);
+//删除key
 int dictDelete(dict *d, const void *key);
 dictEntry *dictUnlink(dict *ht, const void *key);
 void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
+//回收字典内存
 void dictRelease(dict *d);
+//根据key获取字典中的节点
 dictEntry * dictFind(dict *d, const void *key);
+//获取key对应的值
 void *dictFetchValue(dict *d, const void *key);
+//字典表调整大小, 以字典节点数量作为hash表的大小
 int dictResize(dict *d);
+//获取字典迭代器
 dictIterator *dictGetIterator(dict *d);
 dictIterator *dictGetSafeIterator(dict *d);
 dictEntry *dictNext(dictIterator *iter);

@@ -257,44 +257,67 @@ int dictTryExpand(dict *d, unsigned long size) {
  * guaranteed that this function will rehash even a single bucket, since it
  * will visit at max N*10 empty buckets in total, otherwise the amount of
  * work it does would be unbound and the function may block for a long time. */
-//字典 rehash 过程
+//字典 rehash 过程, n 表示迁移桶的数量
 int dictRehash(dict *d, int n) {
+    //最多遍历空桶的数量
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
+    //如果字典不是rehash状态, 直接返回迁移失败
     if (!dictIsRehashing(d)) return 0;
 
+    //如果迁移桶的数量不为空, 且hash表没迁移完. 注意: 这里是先读取n再--
     while(n-- && d->ht[0].used != 0) {
         dictEntry *de, *nextde;
 
         /* Note that rehashidx can't overflow as we are sure there are more
          * elements because ht[0].used != 0 */
+        //断言hash表桶的个数是大于已经rehash的桶索引. rehashidx 最大为 ht[0].size - 1
         assert(d->ht[0].size > (unsigned long)d->rehashidx);
+        //如果要迁移的桶的链表首节点为 NULL, 则表示此桶为空. 这个循环主要上去掉空桶
         while(d->ht[0].table[d->rehashidx] == NULL) {
+            //准备迁移下一个桶
             d->rehashidx++;
+            //如果已经超过规定处理的最大空桶数量, 则直接返回迁移成功
             if (--empty_visits == 0) return 1;
         }
+        //获取rehash上面的链表首节点
         de = d->ht[0].table[d->rehashidx];
         /* Move all the keys in this bucket from the old to the new hash HT */
+        //遍历链表
         while(de) {
             uint64_t h;
 
+            //获取下一个节点
             nextde = de->next;
             /* Get the index in the new hash table */
+            //重新计算当前节点在新的hash表中的槽的索引
             h = dictHashKey(d, de->key) & d->ht[1].sizemask;
+            //将节点设置到新的hash表中
             de->next = d->ht[1].table[h];
             d->ht[1].table[h] = de;
+            //旧hash表数量减少
             d->ht[0].used--;
+            //新hash表数量增加
             d->ht[1].used++;
+            //攻取下一个节点
             de = nextde;
         }
+        //清空旧节点的hash槽
         d->ht[0].table[d->rehashidx] = NULL;
+        //设置下一个要迁移处理的hash槽
         d->rehashidx++;
     }
 
     /* Check if we already rehashed the whole table... */
+    //处理完, 判断是一下hash表是否迁移完成
     if (d->ht[0].used == 0) {
+        //迁移完成
+        //回收旧hash表
         zfree(d->ht[0].table);
+        //用新hash表替换旧hash表
         d->ht[0] = d->ht[1];
+        //
         _dictReset(&d->ht[1]);
+        //清空下一个rehash的索引
         d->rehashidx = -1;
         return 0;
     }
@@ -578,60 +601,92 @@ int _dictClear(dict *d, dictht *ht, void(callback)(void *)) {
     /* Free all the elements */
     //如果hash表的hash数组已经初始化且hash表中有元素, 则遍历处理
     for (i = 0; i < ht->size && ht->used > 0; i++) {
+        //he 当前节点, nextHe 表示下一个节点
         dictEntry *he, *nextHe;
 
+        //如果有传callback函数, 则每清空65535个槽, 则执行回调方法一次
+        //为什么要这么处理这个回调呢 ? 主要为了避免hash表太大, 一直删除会阻塞, 通过回调方法, 删除阻塞过程中能够处理新的请求 https://www.modb.pro/db/72930
         if (callback && (i & 65535) == 0) callback(d->privdata);
 
+        //获取首节点不存在, 如果首节点不存在则不处理
         if ((he = ht->table[i]) == NULL) continue;
+        //如果节点存在
         while(he) {
+            //获取下一个节点
             nextHe = he->next;
+            //回收当前节点key的内存
             dictFreeKey(d, he);
+            //回收当前节点val的内存
             dictFreeVal(d, he);
+            //回收节点的内存
             zfree(he);
+            //减少节点数量
             ht->used--;
+            //获取下一个节点
             he = nextHe;
         }
     }
     /* Free the table and the allocated cache structure */
+    //释放hash表
     zfree(ht->table);
     /* Re-initialize the table */
+    //重置字典
     _dictReset(ht);
+    //返回 OK
     return DICT_OK; /* never fails */
 }
 
 /* Clear & Release the hash table */
+//回收字典内存
 void dictRelease(dict *d)
 {
+    //清空hash表
     _dictClear(d,&d->ht[0],NULL);
+    //清空rehash中的hash表
     _dictClear(d,&d->ht[1],NULL);
+    //回收字典内存
     zfree(d);
 }
 
+//根据key查询节点
 dictEntry *dictFind(dict *d, const void *key)
 {
     dictEntry *he;
     uint64_t h, idx, table;
 
+    //如果字典为空, 则直接返回 NULL
     if (dictSize(d) == 0) return NULL; /* dict is empty */
+    //如果字典正在 rehash, 则执行一次rehash步聚
     if (dictIsRehashing(d)) _dictRehashStep(d);
+    //计算key的hash值
     h = dictHashKey(d, key);
+    //遍历字典的hash表
     for (table = 0; table <= 1; table++) {
+        //计算出key所有的hash槽索引
         idx = h & d->ht[table].sizemask;
+        //根据hash槽获取首节点
         he = d->ht[table].table[idx];
+        //遍历链表, 直到找到key一样的节点
         while(he) {
+            //如果找到, 则直接返回找到的节点
             if (key==he->key || dictCompareKeys(d, key, he->key))
                 return he;
             he = he->next;
         }
+        //如果没找到, 且字典没有rehash, 则直接返回 NULL
         if (!dictIsRehashing(d)) return NULL;
     }
+    //没找到, 返回NULL
     return NULL;
 }
 
+//获取key对应的值
 void *dictFetchValue(dict *d, const void *key) {
     dictEntry *he;
 
+    //根据key查询节点
     he = dictFind(d,key);
+    //如果节点存在, 则获取节点的值, 否则返回 NULL
     return he ? dictGetVal(he) : NULL;
 }
 
