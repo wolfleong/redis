@@ -311,11 +311,11 @@ int dictRehash(dict *d, int n) {
     //处理完, 判断是一下hash表是否迁移完成
     if (d->ht[0].used == 0) {
         //迁移完成
-        //回收旧hash表
+        //回收旧hash表的数组
         zfree(d->ht[0].table);
-        //用新hash表替换旧hash表
+        //用新hash表替换旧hash表, 赋值相当于拷贝
         d->ht[0] = d->ht[1];
-        //
+        //重置临时的hash表
         _dictReset(&d->ht[1]);
         //清空下一个rehash的索引
         d->rehashidx = -1;
@@ -326,6 +326,7 @@ int dictRehash(dict *d, int n) {
     return 1;
 }
 
+//获取当前毫秒时间
 long long timeInMilliseconds(void) {
     struct timeval tv;
 
@@ -337,15 +338,22 @@ long long timeInMilliseconds(void) {
  * than 0, and is smaller than 1 in most cases. The exact upper bound 
  * depends on the running time of dictRehash(d,100).*/
 int dictRehashMilliseconds(dict *d, int ms) {
+    //如果rehash是暂停的, 则不处理
     if (d->pauserehash > 0) return 0;
 
+    //获取当前时间戳
     long long start = timeInMilliseconds();
+    //统计rehash桶的个数
     int rehashes = 0;
 
+    //rehash 100 个桶
     while(dictRehash(d,100)) {
+        //增加统计
         rehashes += 100;
+        //如果执行时间大于给定的时间, 则退出
         if (timeInMilliseconds()-start > ms) break;
     }
+    //返回rehash桶的个数
     return rehashes;
 }
 
@@ -696,10 +704,12 @@ void *dictFetchValue(dict *d, const void *key) {
  * the fingerprint again when the iterator is released.
  * If the two fingerprints are different it means that the user of the iterator
  * performed forbidden operations against the dictionary while iterating. */
+//计算字典当前状态的签名
 long long dictFingerprint(dict *d) {
     long long integers[6], hash = 0;
     int j;
 
+    //字典所有的内存值, 按顺序获取内存大小
     integers[0] = (long) d->ht[0].table;
     integers[1] = d->ht[0].size;
     integers[2] = d->ht[0].used;
@@ -714,6 +724,7 @@ long long dictFingerprint(dict *d) {
      *
      * This way the same set of integers in a different order will (likely) hash
      * to a different number. */
+    //遍历内存值, 计算出一个hash值
     for (j = 0; j < 6; j++) {
         hash += integers[j];
         /* For the hashing step we use Tomas Wang's 64 bit integer hash. */
@@ -728,10 +739,13 @@ long long dictFingerprint(dict *d) {
     return hash;
 }
 
+//获取字典迭代器
 dictIterator *dictGetIterator(dict *d)
 {
+    //分配迭代器内存
     dictIterator *iter = zmalloc(sizeof(*iter));
 
+    //迭代器初始化
     iter->d = d;
     iter->table = 0;
     iter->index = -1;
@@ -741,81 +755,120 @@ dictIterator *dictGetIterator(dict *d)
     return iter;
 }
 
+//获取安全的迭代器
 dictIterator *dictGetSafeIterator(dict *d) {
+    //获取迭代器
     dictIterator *i = dictGetIterator(d);
 
+    //设置save为1
     i->safe = 1;
     return i;
 }
 
+//获取下一个节点
 dictEntry *dictNext(dictIterator *iter)
 {
+    //死循环
     while (1) {
+        //如果当前节点为空
         if (iter->entry == NULL) {
+            //获取要遍历的hash表
             dictht *ht = &iter->d->ht[iter->table];
+            //如果hash数组table的索引为-1或者ht数组索引为0, 则表示第一次进来遍历
             if (iter->index == -1 && iter->table == 0) {
+                //如果是安全的遍历, 则要暂停rehash
                 if (iter->safe)
                     dictPauseRehashing(iter->d);
                 else
+                    //不安全的遍历, 则给字典计算一个指纹(相当于校验和)
                     iter->fingerprint = dictFingerprint(iter->d);
             }
+            //索引加1
             iter->index++;
+            //如果当前索引大于hash数组长度
             if (iter->index >= (long) ht->size) {
+                //判断当前字典是不是在rehash, 并且还没有把所有hash表遍历完
                 if (dictIsRehashing(iter->d) && iter->table == 0) {
+                    //索引加1, 遍历一下个hash表
                     iter->table++;
+                    //hash表的索引重置为0
                     iter->index = 0;
+                    //获取第二个hash表
                     ht = &iter->d->ht[1];
                 } else {
                     break;
                 }
             }
+            //获取hash槽的首节点
             iter->entry = ht->table[iter->index];
         } else {
+            //获取下一个节点
             iter->entry = iter->nextEntry;
         }
+        //如果节点不为NULL
         if (iter->entry) {
             /* We need to save the 'next' here, the iterator user
              * may delete the entry we are returning. */
+            //先记录下一个节点, 方便使用. 当前节点 entry 有可能被删除
             iter->nextEntry = iter->entry->next;
+            //返回当前节点
             return iter->entry;
         }
     }
+    //没找到, 则返回 NULL
     return NULL;
 }
 
+//回收迭代器
 void dictReleaseIterator(dictIterator *iter)
 {
+    //如果迭代器已经开始遍历
     if (!(iter->index == -1 && iter->table == 0)) {
+        //判断是否按全
         if (iter->safe)
+            //减少rehash停顿数量
             dictResumeRehashing(iter->d);
         else
+            //断言当前签名与迭代器记录的状态必须一致, 不一致表示用户进行了非法操作
             assert(iter->fingerprint == dictFingerprint(iter->d));
     }
+    //回收迭代器的内存
     zfree(iter);
 }
 
 /* Return a random entry from the hash table. Useful to
  * implement randomized algorithms */
+//从字典中获取一个随机的key
 dictEntry *dictGetRandomKey(dict *d)
 {
     dictEntry *he, *orighe;
     unsigned long h;
+    //listlen 链表长度, listele 链表随机的位置
     int listlen, listele;
 
+    //如果字典为空, 则直接返回 NULL
     if (dictSize(d) == 0) return NULL;
+    //如果字典正在 rehash, 则执行rehash的迁移
     if (dictIsRehashing(d)) _dictRehashStep(d);
+    //如果当前字典正在rehash
     if (dictIsRehashing(d)) {
+        //循环随机获取, 直接到hash槽有节点存在为止
         do {
             /* We are sure there are no elements in indexes from 0
              * to rehashidx-1 */
+            //获取一个随机数, 然后根据两个hash表的长度计算hash槽
             h = d->rehashidx + (randomULong() % (dictSlots(d) - d->rehashidx));
+            //如果算出来的随机hash槽大于旧hash表的长度, 则表示要获取新hash表的随机槽首节点, 否则获取旧hash表的随机槽首节点
             he = (h >= d->ht[0].size) ? d->ht[1].table[h - d->ht[0].size] :
                                       d->ht[0].table[h];
         } while(he == NULL);
     } else {
         do {
+            //生成随机数, 计算随机hash槽
             h = randomULong() & d->ht[0].sizemask;
+            //获取随机hash槽的首节点
             he = d->ht[0].table[h];
+            //节点为NULL, 则继续随机
         } while(he == NULL);
     }
 
@@ -823,15 +876,21 @@ dictEntry *dictGetRandomKey(dict *d)
      * list and we need to get a random element from the list.
      * The only sane way to do so is counting the elements and
      * select a random index. */
+    //链表长度设置为0
     listlen = 0;
+    //先将首节点暂存起来
     orighe = he;
+    //遍历所有节点, 统计链表长度
     while(he) {
         he = he->next;
         listlen++;
     }
+    //随机获取链表上的位置
     listele = random() % listlen;
+    //遍历链表, 获取指定位置的节点
     he = orighe;
     while(listele--) he = he->next;
+    //返回随机的节点
     return he;
 }
 
@@ -1258,6 +1317,7 @@ void dictDisableResize(void) {
     dict_can_resize = 0;
 }
 
+//获取key的hash值
 uint64_t dictGetHash(dict *d, const void *key) {
     return dictHashKey(d, key);
 }

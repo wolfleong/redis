@@ -103,7 +103,7 @@ typedef struct dict {
     dictht ht[2];
     //rehash下一个要迁移的桶索引, rehash 不进行时为 -1
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
-    // pauserehash > 0 表示 rehash 是暂停的
+    // pauserehash > 0 表示 rehash 是暂停的. 安全的迭代需要停止
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
 } dict;
 
@@ -115,11 +115,14 @@ typedef struct dict {
 typedef struct dictIterator {
     //字典的指针
     dict *d;
-    //数组下标
+    //hash槽索引下标
     long index;
+    //table 迭代中的hash表数组ht的索引, safe 表示是否安全
     int table, safe;
+    //entry表示当前已返回的节点, nextEntry表示下一个节点
     dictEntry *entry, *nextEntry;
     /* unsafe iterator fingerprint for misuse detection. */
+    //字典当前状态的签名, 64位的hash值
     long long fingerprint;
 } dictIterator;
 
@@ -187,18 +190,19 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 #define dictGetUnsignedIntegerVal(he) ((he)->v.u64)
 //获取节点的double类型的值
 #define dictGetDoubleVal(he) ((he)->v.d)
-//获取hash数组的大小
+//获取hash数组的总大小(包括rehash数组)
 #define dictSlots(d) ((d)->ht[0].size+(d)->ht[1].size)
 //获取点节的数量
 #define dictSize(d) ((d)->ht[0].used+(d)->ht[1].used)
 //判断字段是否在 rehash 中
 #define dictIsRehashing(d) ((d)->rehashidx != -1)
-//字典rehash设置停顿
+//字典rehash设置停顿. 为什么能一直加呢, 因为可能有多个安全的迭代器正在迭代
 #define dictPauseRehashing(d) (d)->pauserehash++
 //字段rehash设置取消停顿
 #define dictResumeRehashing(d) (d)->pauserehash--
 
 /* If our unsigned long type can store a 64 bit number, use a 64 bit PRNG. */
+//定义随机函数
 #if ULONG_MAX >= 0xffffffffffffffff
 #define randomULong() ((unsigned long) genrand64_int64())
 #else
@@ -252,6 +256,7 @@ int dictRehashMilliseconds(dict *d, int ms);
 void dictSetHashFunctionSeed(uint8_t *seed);
 uint8_t *dictGetHashFunctionSeed(void);
 unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, dictScanBucketFunction *bucketfn, void *privdata);
+//获取key的hash值
 uint64_t dictGetHash(dict *d, const void *key);
 dictEntry **dictFindEntryRefByPtrAndHash(dict *d, const void *oldptr, uint64_t hash);
 
