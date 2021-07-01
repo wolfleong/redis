@@ -365,6 +365,7 @@ int dictRehashMilliseconds(dict *d, int ms) {
  * This function is called by common lookup or update operations in the
  * dictionary so that the hash table automatically migrates from H1 to H2
  * while it is actively used. */
+//执行一步渐进式rehash
 static void _dictRehashStep(dict *d) {
     //如果rehash不是暂停的, 则执行rehash迁移
     if (d->pauserehash == 0) dictRehash(d,1);
@@ -838,7 +839,8 @@ void dictReleaseIterator(dictIterator *iter)
 
 /* Return a random entry from the hash table. Useful to
  * implement randomized algorithms */
-//从字典中获取一个随机的key
+//从字典中获取一个随机的key. 可能会出现不公平的情况
+//算法大概的思路是: 随机获取一个hash槽, 然后从槽的链表中随机获取一个节点
 dictEntry *dictGetRandomKey(dict *d)
 {
     dictEntry *he, *orighe;
@@ -856,13 +858,15 @@ dictEntry *dictGetRandomKey(dict *d)
         do {
             /* We are sure there are no elements in indexes from 0
              * to rehashidx-1 */
-            //获取一个随机数, 然后根据两个hash表的长度计算hash槽
+            //获取一个随机数, 然后根据两个hash表的长度计算hash槽.
+            // randomULong() % (dictSlots(d) - d->rehashidx) 保证随机值不包括 rehashidx 之前的, 注意, 这里是取模不是&
             h = d->rehashidx + (randomULong() % (dictSlots(d) - d->rehashidx));
             //如果算出来的随机hash槽大于旧hash表的长度, 则表示要获取新hash表的随机槽首节点, 否则获取旧hash表的随机槽首节点
             he = (h >= d->ht[0].size) ? d->ht[1].table[h - d->ht[0].size] :
                                       d->ht[0].table[h];
         } while(he == NULL);
     } else {
+        //不在rehash, 只有一个hash表
         do {
             //生成随机数, 计算随机hash槽
             h = randomULong() & d->ht[0].sizemask;
@@ -916,16 +920,23 @@ dictEntry *dictGetRandomKey(dict *d)
  * of continuous elements to run some kind of algorithm or to produce
  * statistics. However the function is much faster than dictGetRandomKey()
  * at producing N elements. */
+//随机采集指定数量的节点. 有可能返回的数量达不到 count 的个数. 如果要返回一些随机key, 这个函数比 dictGetRandomKey 快很多
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
     unsigned long j; /* internal hash table id, 0 or 1. */
+    //hash表的数量, 值为1或者2
     unsigned long tables; /* 1 or 2 tables? */
+    //stored 表示已经采集的节点数, maxsizemask 表示容量的最大hash表的掩码
     unsigned long stored = 0, maxsizemask;
+    //采集次数上限
     unsigned long maxsteps;
 
+    //最多只能返回字典的总节点数.
     if (dictSize(d) < count) count = dictSize(d);
+    //采集次数上限为元素个数的10倍
     maxsteps = count*10;
 
     /* Try to do a rehashing work proportional to 'count'. */
+    //根据返回key的个数, 执行渐进式rehash操作
     for (j = 0; j < count; j++) {
         if (dictIsRehashing(d))
             _dictRehashStep(d);
@@ -933,53 +944,80 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
             break;
     }
 
+    //如果字典正在rehash, 则需要遍历两个hash表, 否则就遍历一个
     tables = dictIsRehashing(d) ? 2 : 1;
+    //获取hash表0的掩码作为最大掩码
     maxsizemask = d->ht[0].sizemask;
+    //如果hash表数量大于1, 表示字典现在是rehash状态
+    //如果字典是rehash状态, 则对比两个hash表的掩码, 取最大的作为 maxsizemask
     if (tables > 1 && maxsizemask < d->ht[1].sizemask)
         maxsizemask = d->ht[1].sizemask;
 
     /* Pick a random point inside the larger table. */
+    //获取随机数然后计算出一个随机hash槽.
     unsigned long i = randomULong() & maxsizemask;
+    //统计遍历了空的hash槽个数
     unsigned long emptylen = 0; /* Continuous empty entries so far. */
+    //如果采样的key已经足够或者达到采样上限, 则退出循环
     while(stored < count && maxsteps--) {
+        //遍历hash表数组进行采集
         for (j = 0; j < tables; j++) {
             /* Invariant of the dict.c rehashing: up to the indexes already
              * visited in ht[0] during the rehashing, there are no populated
              * buckets, so we can skip ht[0] for indexes between 0 and idx-1. */
+            //跳过已经迁移到新hash表的hash槽索引
+            //tables == 2 字典表示正在rehash
+            //j == 0 , 表示目前正在遍历旧hash表
+            //i < (unsigned long) d->rehashidx 表示i属于已经迁移的hash槽索引
             if (tables == 2 && j == 0 && i < (unsigned long) d->rehashidx) {
                 /* Moreover, if we are currently out of range in the second
                  * table, there will be no elements in both tables up to
                  * the current rehashing index, so we jump if possible.
                  * (this happens when going from big to small table). */
+                //如果当前随机索引大于hash表1的长度, 表示只能在hash表0中获取, 那么跳过 rehashidx 前面已经迁移的槽
                 if (i >= d->ht[1].size)
                     i = d->rehashidx;
                 else
+                    //i 小于 rehashidx, 但是没有大于hash表1的容量, 直接跳过hash表0, 从hash表1中采样
                     continue;
             }
+            //如果随机hash槽索引大于当前hash表数组的长度, 则不处理
             if (i >= d->ht[j].size) continue; /* Out of range for this table. */
+            //获取hash表的首节点
             dictEntry *he = d->ht[j].table[i];
 
             /* Count contiguous empty buckets, and jump to other
              * locations if they reach 'count' (with a minimum of 5). */
+            //如果首节点为 NULL
             if (he == NULL) {
+                //统计空的hash槽
                 emptylen++;
+                //如果空的hash槽个数超过5且超过 count, 重新生成随机hash槽索引, 并且重置空的hash槽统计
                 if (emptylen >= 5 && emptylen > count) {
                     i = randomULong() & maxsizemask;
                     emptylen = 0;
                 }
             } else {
+                //首节点不为空, 重置空的hash槽统计
                 emptylen = 0;
+                //遍历链表
                 while (he) {
                     /* Collect all the elements of the buckets found non
                      * empty while iterating. */
+                    //将节点放进 dictEntry * 数组
                     *des = he;
+                    //数组指针移动到下一个索引
                     des++;
+                    //获取下一个节点
                     he = he->next;
+                    //获取的节点数加1
                     stored++;
+                    //如果获取的节点数已经满足, 则直接反回
                     if (stored == count) return stored;
                 }
             }
         }
+        //获取下一个hash槽位置
         i = (i+1) & maxsizemask;
     }
     return stored;
@@ -997,20 +1035,29 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
  * appearing one after the other. Then we report a random element in the range.
  * In this way we smooth away the problem of different chain lengths. */
 #define GETFAIR_NUM_ENTRIES 15
+//公平地获取一个随机key.
+//为什么比 dictGetRandomKey 公平一点呢?. dictGetRandomKey 由于不同的槽, 链表的长度可能不一样, 就会导致概率的分布不一样
+//dictGetSomeKeys 返回的长度是固定的, 从固定的链表长度中随机节点, 相对于 dictGetRandomKey 链表长度不固定会公平一点
 dictEntry *dictGetFairRandomKey(dict *d) {
+    //节点数组
     dictEntry *entries[GETFAIR_NUM_ENTRIES];
+    //随机获取15个节点
     unsigned int count = dictGetSomeKeys(d,entries,GETFAIR_NUM_ENTRIES);
     /* Note that dictGetSomeKeys() may return zero elements in an unlucky
      * run() even if there are actually elements inside the hash table. So
      * when we get zero, we call the true dictGetRandomKey() that will always
      * yield the element if the hash table has at least one. */
+    //如果没有获取到, 则随机返回一个key
     if (count == 0) return dictGetRandomKey(d);
+    //在这一组节点中, 生成随机索引
     unsigned int idx = rand() % count;
+    //在这一组节点中, 随机获取一个
     return entries[idx];
 }
 
 /* Function to reverse bits. Algorithm from:
  * http://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel */
+// 对 v 进行二进制逆序操作
 static unsigned long rev(unsigned long v) {
     unsigned long s = CHAR_BIT * sizeof(v); // bit size; must be power of 2
     unsigned long mask = ~0UL;
@@ -1302,17 +1349,22 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
     return idx;
 }
 
+//清空字典
 void dictEmpty(dict *d, void(callback)(void*)) {
+    //清空hash表0
     _dictClear(d,&d->ht[0],callback);
+    //清空hash表1
     _dictClear(d,&d->ht[1],callback);
     d->rehashidx = -1;
     d->pauserehash = 0;
 }
 
+//设置字典允许扩容
 void dictEnableResize(void) {
     dict_can_resize = 1;
 }
 
+//设置字典不允许扩容
 void dictDisableResize(void) {
     dict_can_resize = 0;
 }
