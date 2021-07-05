@@ -1059,6 +1059,7 @@ dictEntry *dictGetFairRandomKey(dict *d) {
  * http://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel */
 // 对 v 进行二进制逆序操作
 static unsigned long rev(unsigned long v) {
+    //CHAR_BIT 一般是8位, sizeof 表示v的字节
     unsigned long s = CHAR_BIT * sizeof(v); // bit size; must be power of 2
     unsigned long mask = ~0UL;
     while ((s >>= 1) > 0) {
@@ -1152,6 +1153,7 @@ static unsigned long rev(unsigned long v) {
  * 3) The reverse cursor is somewhat hard to understand at first, but this
  *    comment is supposed to help.
  */
+//字典扫描
 unsigned long dictScan(dict *d,
                        unsigned long v,
                        dictScanFunction *fn,
@@ -1162,18 +1164,26 @@ unsigned long dictScan(dict *d,
     const dictEntry *de, *next;
     unsigned long m0, m1;
 
+    //如果字典为空, 则不处理
     if (dictSize(d) == 0) return 0;
 
     /* This is needed in case the scan callback tries to do dictFind or alike. */
+    //如果字典正在rehash, 则停顿rehash
     dictPauseRehashing(d);
 
+    //如果字典没有在rehash
     if (!dictIsRehashing(d)) {
+        //获取hash表0的指针
         t0 = &(d->ht[0]);
+        //获取hash表0的掩码
         m0 = t0->sizemask;
 
         /* Emit entries at cursor */
+        //如果桶的回调函数存在, 则用回调函数处理要获取的桶
         if (bucketfn) bucketfn(privdata, &t0->table[v & m0]);
+        //获取桶上的首节点
         de = t0->table[v & m0];
+        //如果节点存在, 则遍历链表上的节点, 并且使用 fn 函数处理
         while (de) {
             next = de->next;
             fn(privdata, de);
@@ -1182,41 +1192,60 @@ unsigned long dictScan(dict *d,
 
         /* Set unmasked bits so incrementing the reversed cursor
          * operates on the masked bits */
+        //假如hash表0长度为8, 那么m0就应该为前29位为0, 后三位为1, 也就是 ...000111
+        //~m0 也就是, ...111000, v |= ~m0 就相当于保留低位的数据, v最终结果为, 高29位为1, 低3位为实际数据, ...111xxx
         v |= ~m0;
 
         /* Increment the reverse cursor */
+        //反转游标, 就变成 xxx111...111
         v = rev(v);
+        //游标加1, 因为低位都是1, 加1之后, 就会进1, 最终相当于实际数据加1, 其实就相当于xx(x + 1)000...000
         v++;
+        //再次返回转回原来的顺序
         v = rev(v);
 
     } else {
+        //获取字段的hash表0的引用
         t0 = &d->ht[0];
+        //获取字典的hash表1的引用
         t1 = &d->ht[1];
 
         /* Make sure t0 is the smaller and t1 is the bigger table */
+        //判断那个hash表的容量最小, 小容量的hash表为t0
         if (t0->size > t1->size) {
             t0 = &d->ht[1];
             t1 = &d->ht[0];
         }
 
+        //获取t0的掩码
         m0 = t0->sizemask;
+        //获取t1的掩码
         m1 = t1->sizemask;
 
         /* Emit entries at cursor */
+        //如果 bucketfn 函数不为null, 则使用bucketfn对链表进行处理
         if (bucketfn) bucketfn(privdata, &t0->table[v & m0]);
+        //获取游标对应的首节点
         de = t0->table[v & m0];
+        //遍历链表
         while (de) {
+            //获取下一个节点
             next = de->next;
+            //处理当前节点
             fn(privdata, de);
             de = next;
         }
 
         /* Iterate over indices in larger table that are the expansion
          * of the index pointed to by the cursor in the smaller table */
+        //处理大hash表t1
         do {
             /* Emit entries at cursor */
+            //首先用桶函数处理
             if (bucketfn) bucketfn(privdata, &t1->table[v & m1]);
+            //获取游标在大表t1对应的槽
             de = t1->table[v & m1];
+            //遍历槽上的链表, 使用函数处理获得的节点
             while (de) {
                 next = de->next;
                 fn(privdata, de);
@@ -1224,15 +1253,20 @@ unsigned long dictScan(dict *d,
             }
 
             /* Increment the reverse cursor not covered by the smaller mask.*/
+            //假如m1为...011111, ~m1就是...100000, v |= ~m1 就相当于 ...1xxxxx
             v |= ~m1;
+            //反转, 结果是 xxxxx11...111
             v = rev(v);
             v++;
             v = rev(v);
 
             /* Continue while bits covered by mask difference is non-zero */
+            //如果m0是...000111, m1是...011111, 那么 m0^m1就是...011000, 也就是只保留m1的高位
+            //v & (m0 ^ m1) 就是, 当v相对于m0的高位都为0时, 退出循环
         } while (v & (m0 ^ m1));
     }
 
+    //减少停顿rehash的状态
     dictResumeRehashing(d);
 
     return v;
