@@ -1239,6 +1239,12 @@ unsigned long dictScan(dict *d,
         /* Iterate over indices in larger table that are the expansion
          * of the index pointed to by the cursor in the smaller table */
         //处理大hash表t1
+        //小表的槽, 在按大表重hash后的槽都是相对固定的
+        // 假如小表容量是8, 则他的槽二进制就是三位, 如: 001, 010等等, 我们以abc表示3位二进制变量
+        // 当扩容到32, 则他们二进制位为5位, 如: 00010, 01010等, 我们以xxabc来表示5位后的二进制变量
+        // 也就是扩容后, 落在二进制abc的值, 很有可能会重hash后会落在xxabc中,
+        // 所以我们扫描小表的abc后, 再将abc作为后缀, 穷举xxabc中的xx, 就可以获取rehash两张表中原来在同一个槽的key值
+        //如果是大表变小表同理
         do {
             /* Emit entries at cursor */
             //首先用桶函数处理
@@ -1252,10 +1258,15 @@ unsigned long dictScan(dict *d,
                 de = next;
             }
 
+            //为什么这里能直接往上递增呢?
+            //假如是小表变大表, 上个游标xxabc的xx肯定是00, 所以在读大表时, 可以直接倒序往上加, 直到xx再次变00, 也就是穷举xx
+            //假如是大表变小表, 上个游标xxabc的xx很可能不为00, 假如为01, 那么就代表着00和10是被访问过的了, 最终才会返回01的, 所以大表区动小表
+            //可以参考 https://www.infoq.cn/article/piaabmlotbqcjkrt7l2v
+            //以前是 v = (((v | m0) + 1) & ~m0) | (v & m0);   //BUG
             /* Increment the reverse cursor not covered by the smaller mask.*/
-            //假如m1为...011111, ~m1就是...100000, v |= ~m1 就相当于 ...1xxxxx
+            //假如m1为...011111, ~m1就是...100000, v |= ~m1 就相当于 ...1xxabc
             v |= ~m1;
-            //反转, 结果是 xxxxx11...111
+            //反转, 结果是 abcxx11...111
             v = rev(v);
             v++;
             v = rev(v);
