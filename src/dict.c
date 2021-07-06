@@ -1057,13 +1057,20 @@ dictEntry *dictGetFairRandomKey(dict *d) {
 
 /* Function to reverse bits. Algorithm from:
  * http://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel */
-// 对 v 进行二进制逆序操作
+// 对 v 进行二进制逆序操作, 这个算法有点意思, 可以看一下 https://www.cnblogs.com/gqtcgq/p/7247077.html
 static unsigned long rev(unsigned long v) {
-    //CHAR_BIT 一般是8位, sizeof 表示v的字节
+    //CHAR_BIT 一般是8位, sizeof 表示v的字节, long是4个字节, 也就是 s=32, 也就是二进制的 100000
     unsigned long s = CHAR_BIT * sizeof(v); // bit size; must be power of 2
+    //~0UL 相当于32个1
     unsigned long mask = ~0UL;
+    //s >>= 1 第一次移动之后就是 010000, 也就是16, 第三次为8, 依次类推4, 2, 1, 最多向右移动6次就为0了, 也就是说while有5次的遍历操作
     while ((s >>= 1) > 0) {
+        //mask << s相当于左移s位, 也就是保留低s位, 最终变成高s位为1, 低s位为0
+        //mask ^= (mask << s), mask结果为只有低s位都为1, 高s位都是0, 如: 也就是高16位都为0, 低16位都为1
         mask ^= (mask << s);
+        //(v >> s) & mask相当于将高s位移动到低s位
+        //~mask表示高s位都是1, 低s位都是0, (v << s) & ~mask 相当将低s位移动到高s位
+        //将两者 | , 表示将高s位与低s位互换了
         v = ((v >> s) & mask) | ((v << s) & ~mask);
     }
     return v;
