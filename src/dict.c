@@ -81,8 +81,10 @@ static int _dictInit(dict *ht, dictType *type, void *privDataPtr);
 
 /* -------------------------- hash functions -------------------------------- */
 
+//hash函数种子数组
 static uint8_t dict_hash_function_seed[16];
 
+//设置hash函数的种子
 void dictSetHashFunctionSeed(uint8_t *seed) {
     memcpy(dict_hash_function_seed,seed,sizeof(dict_hash_function_seed));
 }
@@ -337,6 +339,7 @@ long long timeInMilliseconds(void) {
 /* Rehash in ms+"delta" milliseconds. The value of "delta" is larger 
  * than 0, and is smaller than 1 in most cases. The exact upper bound 
  * depends on the running time of dictRehash(d,100).*/
+//指定时间rehash
 int dictRehashMilliseconds(dict *d, int ms) {
     //如果rehash是暂停的, 则不处理
     if (d->pauserehash > 0) return 0;
@@ -1073,6 +1076,7 @@ static unsigned long rev(unsigned long v) {
         //将两者 | , 表示将高s位与低s位互换了
         v = ((v >> s) & mask) | ((v << s) & ~mask);
     }
+    //返回倒置的二进制
     return v;
 }
 
@@ -1431,23 +1435,34 @@ uint64_t dictGetHash(dict *d, const void *key) {
  * the hash value should be provided using dictGetHash.
  * no string / key comparison is performed.
  * return value is the reference to the dictEntry if found, or NULL if not found. */
+//根据给定指针和预先计算好hash值查询相关节点
 dictEntry **dictFindEntryRefByPtrAndHash(dict *d, const void *oldptr, uint64_t hash) {
+    //he 表示当前节点, heref 表示下一个节点指针的指针
     dictEntry *he, **heref;
     unsigned long idx, table;
 
+    //如果字典为空, 则返回 NULL
     if (dictSize(d) == 0) return NULL; /* dict is empty */
+    //遍历hash表
     for (table = 0; table <= 1; table++) {
+        //根据hash获取hash槽的位置
         idx = hash & d->ht[table].sizemask;
+        //获取hash槽的首节点
         heref = &d->ht[table].table[idx];
         he = *heref;
+        //遍历链表的数据
         while(he) {
+            //如果给定指针和key指针一样, 则返回下一个节点指针的指针
             if (oldptr==he->key)
                 return heref;
+            //读取下一个节点
             heref = &he->next;
             he = *heref;
         }
+        //如果不是正在rehash, 则不用遍历下一个hash表
         if (!dictIsRehashing(d)) return NULL;
     }
+    //返回 NULL
     return NULL;
 }
 

@@ -238,29 +238,46 @@ void *dictFetchValue(dict *d, const void *key);
 int dictResize(dict *d);
 //获取字典迭代器
 dictIterator *dictGetIterator(dict *d);
+//获取安全的迭代器
 dictIterator *dictGetSafeIterator(dict *d);
+//获取迭代器中下一个元素
 dictEntry *dictNext(dictIterator *iter);
+//释放迭代器内存, 如果非安全的迭代器, 且迭代过程中字典发生变化, 则报错
 void dictReleaseIterator(dictIterator *iter);
+//获取一个随机的节点
 dictEntry *dictGetRandomKey(dict *d);
+//比较公平地获取一个随机的节点
 dictEntry *dictGetFairRandomKey(dict *d);
+//随机获取一些节点
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count);
 void dictGetStats(char *buf, size_t bufsize, dict *d);
+//生成hash值的函数, 默认使用SipHash算法
 uint64_t dictGenHashFunction(const void *key, int len);
+//不区分大小写生成hash值的函数
 uint64_t dictGenCaseHashFunction(const unsigned char *buf, int len);
+//清空字典
 void dictEmpty(dict *d, void(callback)(void*));
+//设置字典可以扩容
 void dictEnableResize(void);
+//设置字典禁止扩容
 void dictDisableResize(void);
 //字典rehash
 int dictRehash(dict *d, int n);
+//指定时间rehash
 int dictRehashMilliseconds(dict *d, int ms);
+//设置hash函数的种子
 void dictSetHashFunctionSeed(uint8_t *seed);
+//返回hash函数的种子
 uint8_t *dictGetHashFunctionSeed(void);
+//字典key扫描, 并且返回新的游标
 unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, dictScanBucketFunction *bucketfn, void *privdata);
 //获取key的hash值
 uint64_t dictGetHash(dict *d, const void *key);
+//内存碎片清理用的, 目前还不清楚作用
 dictEntry **dictFindEntryRefByPtrAndHash(dict *d, const void *oldptr, uint64_t hash);
 
 /* Hash table types */
+//hash表的各种类型
 extern dictType dictTypeHeapStringCopyKey;
 extern dictType dictTypeHeapStrings;
 extern dictType dictTypeHeapStringCopyKeyValue;
