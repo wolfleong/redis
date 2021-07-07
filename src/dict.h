@@ -47,7 +47,7 @@
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
 
-//字典的节点
+//hash表的节点
 typedef struct dictEntry {
     //节点的key
     void *key;
@@ -62,6 +62,7 @@ typedef struct dictEntry {
     struct dictEntry *next;
 } dictEntry;
 
+//字典的类型,
 typedef struct dictType {
     //键的hash函数
     uint64_t (*hashFunction)(const void *key);
@@ -81,7 +82,7 @@ typedef struct dictType {
 
 /* This is our hash table structure. Every dictionary has two of this as we
  * implement incremental rehashing, for the old to the new table. */
-//hash字典结构体
+//hash表结构体
 typedef struct dictht {
     //hash表的指针数组, dictEntry * 表示hash节点的指针, 再加一个 *, 也就是dictEntry ** 表示数组的首地址
     dictEntry **table;
@@ -89,13 +90,13 @@ typedef struct dictht {
     unsigned long size;
     //hash数组长度掩码, sizemask =  size - 1
     unsigned long sizemask;
-    //hash字典的kv对的个数
+    //hash表的kv对的个数
     unsigned long used;
 } dictht;
 
 //字典的结构体
 typedef struct dict {
-    //字段类型的指针
+    //字典类型的指针
     dictType *type;
     //携带的私有数据
     void *privdata;
