@@ -62,7 +62,7 @@ typedef struct dictEntry {
     struct dictEntry *next;
 } dictEntry;
 
-//字典的类型,
+//字典类型
 typedef struct dictType {
     //键的hash函数
     uint64_t (*hashFunction)(const void *key);
@@ -104,7 +104,7 @@ typedef struct dict {
     dictht ht[2];
     //rehash下一个要迁移的桶索引, rehash 不进行时为 -1
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
-    // pauserehash > 0 表示 rehash 是暂停的. 安全的迭代需要停止
+    // pauserehash > 0 表示 rehash 是暂停的. 为什么暂停需要计数? 因为安全迭代器和扫描都有可能同时存在多个, 所以 pauserehash 的值是很有可能大于1的
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
 } dict;
 
@@ -112,13 +112,13 @@ typedef struct dict {
  * dictAdd, dictFind, and other functions against the dictionary even while
  * iterating. Otherwise it is a non safe iterator, and only dictNext()
  * should be called while iterating. */
-//hash字段的迭代器
+//字典的迭代器
 typedef struct dictIterator {
     //字典的指针
     dict *d;
-    //hash槽索引下标
+    //当前正在迭代的hash槽索引下标
     long index;
-    //table 迭代中的hash表数组ht的索引, safe 表示是否安全
+    //table表示正在迭代的hash表数组ht的索引, safe 表示是否安全
     int table, safe;
     //entry表示当前已返回的节点, nextEntry表示下一个节点
     dictEntry *entry, *nextEntry;
@@ -127,7 +127,9 @@ typedef struct dictIterator {
     long long fingerprint;
 } dictIterator;
 
+//声明字典扫描到节点时的回调函数指针
 typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
+//声明字典扫描到桶时的回调函数指针
 typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 
 /* This is the initial size of every hash table */
@@ -227,7 +229,9 @@ dictEntry *dictAddOrFind(dict *d, void *key);
 int dictReplace(dict *d, void *key, void *val);
 //删除key
 int dictDelete(dict *d, const void *key);
+//移除字典的节点, 不回收内存
 dictEntry *dictUnlink(dict *ht, const void *key);
+//回收节点的内存
 void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
 //回收字典内存
 void dictRelease(dict *d);
@@ -262,7 +266,7 @@ void dictEmpty(dict *d, void(callback)(void*));
 void dictEnableResize(void);
 //设置字典禁止扩容
 void dictDisableResize(void);
-//字典rehash
+//字典执行rehash
 int dictRehash(dict *d, int n);
 //指定时间rehash
 int dictRehashMilliseconds(dict *d, int ms);
@@ -278,7 +282,7 @@ uint64_t dictGetHash(dict *d, const void *key);
 dictEntry **dictFindEntryRefByPtrAndHash(dict *d, const void *oldptr, uint64_t hash);
 
 /* Hash table types */
-//hash表的各种类型
+//字典的各种类型
 extern dictType dictTypeHeapStringCopyKey;
 extern dictType dictTypeHeapStrings;
 extern dictType dictTypeHeapStringCopyKeyValue;
