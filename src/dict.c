@@ -89,6 +89,7 @@ void dictSetHashFunctionSeed(uint8_t *seed) {
     memcpy(dict_hash_function_seed,seed,sizeof(dict_hash_function_seed));
 }
 
+//获取hash函数的种子
 uint8_t *dictGetHashFunctionSeed(void) {
     return dict_hash_function_seed;
 }
@@ -606,7 +607,7 @@ void dictFreeUnlinkedEntry(dict *d, dictEntry *he) {
 }
 
 /* Destroy an entire dictionary */
-//清空字典中的hash表
+//清空字典
 int _dictClear(dict *d, dictht *ht, void(callback)(void *)) {
     unsigned long i;
 
