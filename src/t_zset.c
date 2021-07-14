@@ -68,28 +68,41 @@ int zslLexValueLteMax(sds value, zlexrangespec *spec);
 
 /* Create a skiplist node with the specified number of levels.
  * The SDS string 'ele' is referenced by the node after the call. */
+//创建跳表节点
 zskiplistNode *zslCreateNode(int level, double score, sds ele) {
+    //分配跳表节点内存, 当前节点内存和数组的内存, 跳表节点是一次性分配内存的
     zskiplistNode *zn =
         zmalloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
+    //设置分值
     zn->score = score;
+    //设置节点元素
     zn->ele = ele;
+    //返回节点
     return zn;
 }
 
 /* Create a new skiplist. */
+//创建跳表
 zskiplist *zslCreate(void) {
     int j;
     zskiplist *zsl;
 
+    //分配跳表内存
     zsl = zmalloc(sizeof(*zsl));
+    //设置高度为1
     zsl->level = 1;
+    //设置元素个数为 0
     zsl->length = 0;
+    //创建头节点
     zsl->header = zslCreateNode(ZSKIPLIST_MAXLEVEL,0,NULL);
+    //遍历层级进行初始化
     for (j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {
         zsl->header->level[j].forward = NULL;
         zsl->header->level[j].span = 0;
     }
+    //回退指针为 NULL
     zsl->header->backward = NULL;
+    //尾指针为 NULL
     zsl->tail = NULL;
     return zsl;
 }
@@ -97,21 +110,32 @@ zskiplist *zslCreate(void) {
 /* Free the specified skiplist node. The referenced SDS string representation
  * of the element is freed too, unless node->ele is set to NULL before calling
  * this function. */
+//回收跳表节点内存
 void zslFreeNode(zskiplistNode *node) {
+    //释放节点元素
     sdsfree(node->ele);
+    //回收节点内存
     zfree(node);
 }
 
 /* Free a whole skiplist. */
+//回收跳表内存
 void zslFree(zskiplist *zsl) {
+    //获取前进指针
     zskiplistNode *node = zsl->header->level[0].forward, *next;
 
+    //回收头节点
     zfree(zsl->header);
+    //遍历节点
     while(node) {
+        //获取下一个节点
         next = node->level[0].forward;
+        //回收当前节点
         zslFreeNode(node);
+        //获取下一个节点
         node = next;
     }
+    //回收跳表结构的内存
     zfree(zsl);
 }
 
@@ -119,10 +143,21 @@ void zslFree(zskiplist *zsl) {
  * The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL
  * (both inclusive), with a powerlaw-alike distribution where higher
  * levels are less likely to be returned. */
+//随机生成一个层级数, 层级为 1 到 32
+//算法的概率解析参考 https://bbs.huaweicloud.com/blogs/272495
 int zslRandomLevel(void) {
     int level = 1;
+    //0xFFFF 转换成二进制为 000...00111...111, 高16位为0, 低16位为1
+    //ZSKIPLIST_P * 0xFFFF, 就相当于 0.25 * 65535 = 16383.75
+    //random()&0xFFFF, 相当于生成一个 1 到 65535 之前的随机数
+    //也就是有四分之三的机会退出循环, 也就是每次有四分之一的概率加 1
+    //也就是如果节点层高为1, 则概率为 (1-p)
+    //也就是如果节点层高为2, 则概率为 p * (1-p)
+    //也就是如果节点层高为3, 则概率为 p ^ 2 * (1-p)
+    //也就是如果节点层高为n, 则概率为 p ^ n * (1-p)
     while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF))
         level += 1;
+    //如果生成的层级大于 ZSKIPLIST_MAXLEVEL , 则最高给 ZSKIPLIST_MAXLEVEL, 否则返回生成的levl
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
 
