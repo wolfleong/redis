@@ -155,6 +155,9 @@ int zslRandomLevel(void) {
     //也就是如果节点层高为2, 则概率为 p * (1-p)
     //也就是如果节点层高为3, 则概率为 p ^ 2 * (1-p)
     //也就是如果节点层高为n, 则概率为 p ^ n * (1-p)
+    //也就是层级的期望值 = 1 * p^0 * (1-p) + 2 * p^1 * (1-p) + 3 * p^2 * ( 1-p) ...
+    //演算过程有点复杂, 略过哈
+    //最终演算结果是 1/(1-p) = 1.33 , 也就是跳跃表期望的树高是 1.33
     while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF))
         level += 1;
     //如果生成的层级大于 ZSKIPLIST_MAXLEVEL , 则最高给 ZSKIPLIST_MAXLEVEL, 否则返回生成的levl
