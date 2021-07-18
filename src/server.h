@@ -371,6 +371,7 @@ typedef enum {
 /* Anti-warning macro... */
 #define UNUSED(V) ((void) V)
 
+//跳表最大层级数为 32
 #define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^64 elements */
 #define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
 
@@ -990,24 +991,38 @@ struct sharedObjectsStruct {
 };
 
 /* ZSETs use a specialized version of Skiplists */
+//跳表节点
 typedef struct zskiplistNode {
+    //元素
     sds ele;
+    //分数值
     double score;
+    //后退指针
     struct zskiplistNode *backward;
+    //层级结构体
     struct zskiplistLevel {
+        //前进指针
         struct zskiplistNode *forward;
+        //跨度
         unsigned long span;
     } level[];
 } zskiplistNode;
 
+//跳表结构体
 typedef struct zskiplist {
+    //表的头节点和尾节点
     struct zskiplistNode *header, *tail;
+    //表中节点的数量
     unsigned long length;
+    //表中层级最大的节点数
     int level;
 } zskiplist;
 
+//zset结构体
 typedef struct zset {
+    //字典用于根据key值获取分值
     dict *dict;
+    //跳表用于根据分值查询key
     zskiplist *zsl;
 } zset;
 
@@ -2146,15 +2161,24 @@ typedef struct {
     int minex, maxex; /* are min or max exclusive? */
 } zlexrangespec;
 
+//创建跳表
 zskiplist *zslCreate(void);
+//回收跳表内存
 void zslFree(zskiplist *zsl);
+//插入一个节点
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele);
 unsigned char *zzlInsert(unsigned char *zl, sds ele, double score);
+//删除一个跳表节点
 int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node);
+//返回满足给定一个分值范围的第一个元素
 zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range);
+//返回满足给定一个分值范围的最后一个元素
 zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec *range);
+//获取节点的分数
 double zzlGetScore(unsigned char *sptr);
+//获取下一个节点
 void zzlNext(unsigned char *zl, unsigned char **eptr, unsigned char **sptr);
+//获取上一个节点
 void zzlPrev(unsigned char *zl, unsigned char **eptr, unsigned char **sptr);
 unsigned char *zzlFirstInRange(unsigned char *zl, zrangespec *range);
 unsigned char *zzlLastInRange(unsigned char *zl, zrangespec *range);

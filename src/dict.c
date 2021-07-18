@@ -1272,8 +1272,9 @@ unsigned long dictScan(dict *d,
 
             //为什么这里能直接往上递增呢?
             //假如是小表变大表, 上个游标xxabc的xx肯定是00, 所以在读大表时, 可以直接倒序往上加, 直到xx再次变00, 也就是穷举xx
-            //假如是大表变小表, 上个游标xxabc的xx很可能不为00, 假如为01, 那么就代表着00和10是被访问过的了(因为大表变小表, 当前游标之前的都被扫描过了), 最终才会返回01的, 所以大表区动小表
-            //可以参考 https://www.infoq.cn/article/piaabmlotbqcjkrt7l2v   https://tech.meituan.com/2018/07/27/redis-rehash-practice-optimization.html
+            //假如是大表变小表, 上个游标xxabc的xx很可能不为00, 假如为01, 那么就代表着00和10是被访问过的了((因为大表变小表, 当前游标之前的都被扫描过了),
+            // 最终才会返回01的, 所以遍历大表时高位序遍历不仅能把迁移的节点后槽遍历完, 还不重复
+            //可以参考 https://www.infoq.cn/article/piaabmlotbqcjkrt7l2v https://tech.meituan.com/2018/07/27/redis-rehash-practice-optimization.html
             //以前是 v = (((v | m0) + 1) & ~m0) | (v & m0);   //BUG
             /* Increment the reverse cursor not covered by the smaller mask.*/
             //假如m1为...011111, ~m1就是...100000, v |= ~m1 就相当于 ...1xxabc
