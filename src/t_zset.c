@@ -177,40 +177,67 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     serverAssert(!isnan(score));
     //获取头节点
     x = zsl->header;
-    //从最高层开始遍历
+    //从最高层开始遍历层级
     for (i = zsl->level-1; i >= 0; i--) {
         /* store rank that is crossed to reach the insert position */
+        //如果当前层级是最高层, 则跨度为0, 否则
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
+        //x->level[i].forward 表示有前进指针
+        //x->level[i].forward->score < score 表示, 前一个节点的分数比当前的分数小
+        //x->level[i].forward->score == score && sdscmp(x->level[i].forward->ele,ele) < 0 表示分数一样, 但是字符串内容排序小
+        //总体看来, 三种情况退出循环,
+        // 1. 没有前进指针
+        // 2. 有前进指针且前进指针的分数比指定分数大
+        // 3. 有前进指针且前进指针分数和指定分数一样大, 但是前进指针的字符串排序靠前
         while (x->level[i].forward &&
                 (x->level[i].forward->score < score ||
                     (x->level[i].forward->score == score &&
                     sdscmp(x->level[i].forward->ele,ele) < 0)))
         {
+            //统计当前节点到下一个节点的跨度
             rank[i] += x->level[i].span;
+            //获取当前层级的下一个节点
             x = x->level[i].forward;
         }
+
+        //在层级i中, 找到一个分数比插入元素小的节点x但x的前进节点分数或者字符串排序比元素大, 记录到 update 指针数组中
         update[i] = x;
     }
     /* we assume the element is not already inside, since we allow duplicated
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
+    //随机生成一个层级
     level = zslRandomLevel();
+    //如果生成的层级比当前跳表的最大层级大
     if (level > zsl->level) {
+        //从最大层级开始, 遍历创建更高的层级
         for (i = zsl->level; i < level; i++) {
+            //设置跨度为 0
             rank[i] = 0;
+            //初始化下一个节点为 header
             update[i] = zsl->header;
+            //设置跨度就是跳表的长度
             update[i]->level[i].span = zsl->length;
         }
+        //更新跳表的最高层级
         zsl->level = level;
     }
+    //创建节点
     x = zslCreateNode(level,score,ele);
+    //遍历当前节点的层级
     for (i = 0; i < level; i++) {
+        //这两行的作用是, 将新建的x节点插入到 update[i]和update[i]->level[i].forward中间,
+        // 也就相当于形成链表 update[i] => x => update[i]->level[i].forward
+        //更新当前节点的x的前进指针为 update[i].forward
         x->level[i].forward = update[i]->level[i].forward;
+        //当前层级的节点update[i]的前进节点为 x
         update[i]->level[i].forward = x;
 
         /* update span covered by update[i] as x is inserted here */
+        //设置x的跨度
         x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
+        //设置update[i]节点的跨度
         update[i]->level[i].span = (rank[0] - rank[i]) + 1;
     }
 

@@ -1003,7 +1003,7 @@ typedef struct zskiplistNode {
     struct zskiplistLevel {
         //前进指针
         struct zskiplistNode *forward;
-        //跨度
+        //跨度, 表示当前节点到forward节点之中间, 相隔了几个节点
         unsigned long span;
     } level[];
 } zskiplistNode;
