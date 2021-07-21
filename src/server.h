@@ -997,7 +997,7 @@ typedef struct zskiplistNode {
     sds ele;
     //分数值
     double score;
-    //后退指针
+    //后退指针, 这个指针只维持最底层的链表
     struct zskiplistNode *backward;
     //层级结构体
     struct zskiplistLevel {

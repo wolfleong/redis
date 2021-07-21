@@ -169,7 +169,9 @@ int zslRandomLevel(void) {
  * of the passed SDS string 'ele'. */
 //插入一个节点
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
+    //节点数组, 记录每一层要插入位置的前一个节点
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
+    //记录每一层要插入节点的前一个节点的排名
     unsigned int rank[ZSKIPLIST_MAXLEVEL];
     int i, level;
 
@@ -180,7 +182,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     //从最高层开始遍历层级
     for (i = zsl->level-1; i >= 0; i--) {
         /* store rank that is crossed to reach the insert position */
-        //如果当前层级是最高层, 则跨度为0, 否则
+        //如果当前层级是最高层, 则排名为0, 否则
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
         //x->level[i].forward 表示有前进指针
         //x->level[i].forward->score < score 表示, 前一个节点的分数比当前的分数小
@@ -200,7 +202,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
             x = x->level[i].forward;
         }
 
-        //在层级i中, 找到一个分数比插入元素小的节点x但x的前进节点分数或者字符串排序比元素大, 记录到 update 指针数组中
+        //在层级i中, 找到一个分数比插入元素小的节点x但x的前进节点分数或者字符串排序比元素大, 记录到 update 指针数组中, 也就是找到要插入的前一个节点
         update[i] = x;
     }
     /* we assume the element is not already inside, since we allow duplicated
@@ -223,7 +225,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         //更新跳表的最高层级
         zsl->level = level;
     }
-    //创建节点
+    //创建要插入的节点
     x = zslCreateNode(level,score,ele);
     //遍历当前节点的层级
     for (i = 0; i < level; i++) {
@@ -234,24 +236,45 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         //当前层级的节点update[i]的前进节点为 x
         update[i]->level[i].forward = x;
 
+        //链表: update[i] => x => update[i]->level[i].forward
+        //对照上面的关系, rank[0] 就是最底层x的前一个节点在在链表的排名, 也就是上面的 update[0] 的排名
+        //对照上面的关系, rank[i] 就是update[i]的排名.
+        //update[i]的排名肯定是小于等于update[0]的排名的, 为什么呢? 因为跳表的查找是基于上层的结果往下层找的,
+        // 也就是上层的节点排名相对粗糙, 越下层越精确
+
         /* update span covered by update[i] as x is inserted here */
-        //设置x的跨度
+        //第i层: update[i] => x => update[i]->level[i].forward
+        //第0层压平: update[i] => ... => update[0] => x => update[i]->level[i].forward => ....
+
+        // rank[0] - rank[i] 也就相当于第0层的 update[0] 到 update[i] 的跨度.
+        // update[i]->level[i].span 就相当于第0层的update[i]到update[i]->level[i].forward的跨度
+        // 那么求x的跨度就相当于第0层的 x 到 update[i]->level[i].forward的跨度
+        //设置x的跨度.
         x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
-        //设置update[i]节点的跨度
+
+        //求update[i]的新跨度, 就相当于求第0层的 update[x] 到 x 的跨度, 那么也就是 update[i] 到 update[0] 的跨度加 1
+        //设置update[i]节点的跨度.
         update[i]->level[i].span = (rank[0] - rank[i]) + 1;
     }
 
     /* increment span for untouched levels */
+    //所有超过新节点层级的前一个节点, 跨度都加 1. 因为他们没有插入新节点, 但是底层链表反而增加了一个节点
     for (i = level; i < zsl->level; i++) {
         update[i]->level[i].span++;
     }
 
+    //设置新节点的后退指针
     x->backward = (update[0] == zsl->header) ? NULL : update[0];
+    //如果x最底层链表的下一个节点不为空
     if (x->level[0].forward)
+        //下一个节点的后退指针为 x
         x->level[0].forward->backward = x;
     else
+        //x为最底层链表的最后一个节点, 则更新跳表的tail为x
         zsl->tail = x;
+    //跳表长度加 1
     zsl->length++;
+    //返回新创建的节点
     return x;
 }
 
