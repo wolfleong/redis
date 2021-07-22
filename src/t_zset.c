@@ -280,23 +280,35 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
 
 /* Internal function used by zslDelete, zslDeleteRangeByScore and
  * zslDeleteRangeByRank. */
+//内部调用, 删除节点. x 就是找到的节点, 也就是要删除的节点
 void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     int i;
+    //从低层往高层遍历
     for (i = 0; i < zsl->level; i++) {
+        //如果当前层级存在 x 节点
         if (update[i]->level[i].forward == x) {
+            //update[i] ==> x ==> next
+            //更新update[i]节点的跨度. 因为要删除 x 节点, 所以由上面链表可知, update[i]新跨度= update[i]原跨度 + x的跨度 - 1
             update[i]->level[i].span += x->level[i].span - 1;
+            //链表由 update[i] ==> x ==> next 变成 update[i] ==> next
             update[i]->level[i].forward = x->level[i].forward;
         } else {
+            //这个层级没有x节点, 因为最底层会删除一个节点, 跨度就会少 1
             update[i]->level[i].span -= 1;
         }
     }
+    //最底层链表表, 如果x不是最后一个节点, 则将维护后退指针
     if (x->level[0].forward) {
         x->level[0].forward->backward = x->backward;
     } else {
+        //x是链表最后一个节点, 则更新跳表 tail 指针为前一个节点
         zsl->tail = x->backward;
     }
+    //因为删除了节点, 有可能导致最高层级的forward指针为空
+    //从最高层往下遍历, 判断这层级的header节点是否有指向链表节点的指针, 如果没有, 则将跳表的最大层级数减少, 直到有链表指针引用的一层为止
     while(zsl->level > 1 && zsl->header->level[zsl->level-1].forward == NULL)
         zsl->level--;
+    //跳表长度减1
     zsl->length--;
 }
 
@@ -308,11 +320,15 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
  * it is not freed (but just unlinked) and *node is set to the node pointer,
  * so that it is possible for the caller to reuse the node (including the
  * referenced SDS string at node->ele). */
+//删除节点
 int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
+    //节点数据, 记录每一层update[i]比x小但是update[i].level[i].forward比x大的节点
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     int i;
 
+    //获取头节点
     x = zsl->header;
+    //从上层往下层遍历, 找出每一层可以变更的位置
     for (i = zsl->level-1; i >= 0; i--) {
         while (x->level[i].forward &&
                 (x->level[i].forward->score < score ||
@@ -325,15 +341,23 @@ int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
     }
     /* We may have multiple elements with the same score, what we need
      * is to find the element with both the right score and object. */
+    // 跳跃表中可能存在分值相同的节点
+    // 所以此处需要判断成员是否相等
     x = x->level[0].forward;
+    //判断分数和对象是否相等
     if (x && score == x->score && sdscmp(x->ele,ele) == 0) {
+        //相等, 则执行删除. x 就是找到的值
         zslDeleteNode(zsl, x, update);
+        //如果节点指针不存在, 则直接回放节点内存
         if (!node)
             zslFreeNode(x);
         else
+            //如果节点指针存在, 将删除的节点返回
             *node = x;
+        //返回删除成功
         return 1;
     }
+    //返回删除失败
     return 0; /* not found */
 }
 

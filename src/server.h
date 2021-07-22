@@ -1014,7 +1014,7 @@ typedef struct zskiplist {
     struct zskiplistNode *header, *tail;
     //表中节点的数量
     unsigned long length;
-    //表中层级最大的节点数
+    //表中最大的层级数
     int level;
 } zskiplist;
 
