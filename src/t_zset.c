@@ -322,7 +322,7 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
  * referenced SDS string at node->ele). */
 //删除节点
 int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
-    //节点数据, 记录每一层update[i]比x小但是update[i].level[i].forward比x大的节点
+    //节点数组, 记录每一层update[i]比ele小但是update[i].level[i].forward比x大的节点
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     int i;
 
@@ -372,13 +372,16 @@ int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
  * element, which is more costly.
  *
  * The function returns the updated element skiplist node pointer. */
+//更新节点分数,
 zskiplistNode *zslUpdateScore(zskiplist *zsl, double curscore, sds ele, double newscore) {
+    //节点数组, 记录每一层update[i]比ele小但是update[i].level[i].forward比ele大的节点
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     int i;
 
     /* We need to seek to element to update to start: this is useful anyway,
      * we'll have to update or remove it. */
     x = zsl->header;
+    //查找每一层的节点, 使得update[i]比ele小但是update[i].level[i].forward比ele大的节点
     for (i = zsl->level-1; i >= 0; i--) {
         while (x->level[i].forward &&
                 (x->level[i].forward->score < curscore ||
@@ -392,27 +395,39 @@ zskiplistNode *zslUpdateScore(zskiplist *zsl, double curscore, sds ele, double n
 
     /* Jump to our element: note that this function assumes that the
      * element with the matching score exists. */
+    //获取最底层的节点最接近的节点
     x = x->level[0].forward;
+    //断言当前分数和最接近的节点的分数一样且字符串对象相等
     serverAssert(x && curscore == x->score && sdscmp(x->ele,ele) == 0);
 
     /* If the node, after the score update, would be still exactly
      * at the same position, we can just update the score without
      * actually removing and re-inserting the element in the skiplist. */
+    //x的上一个节点指针(回退指针)不为空且上一个节点的分数小于新的分数 & x 的下一个节点不为空表下一个节点的分数值比新的分数大
+    //x的上一个节点和后一个节点都为空, 也就是跳表中只有x一个节点
+    //上面两种情况, 直接更新分数值即可
     if ((x->backward == NULL || x->backward->score < newscore) &&
         (x->level[0].forward == NULL || x->level[0].forward->score > newscore))
     {
+        //更新分数值
         x->score = newscore;
+        //返回旧节点
         return x;
     }
 
     /* No way to reuse the old node: we need to remove and insert a new
      * one at a different place. */
+    //先删除原来的节点
     zslDeleteNode(zsl, x, update);
+    //再插入一个新的节点
     zskiplistNode *newnode = zslInsert(zsl,newscore,x->ele);
     /* We reused the old node x->ele SDS string, free the node now
      * since zslInsert created a new one. */
+    //清空节点的值
     x->ele = NULL;
+    //回收节点内存
     zslFreeNode(x);
+    //返回新创建的节点
     return newnode;
 }
 
