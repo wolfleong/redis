@@ -2150,14 +2150,20 @@ void ACLUpdateDefaultUserPassword(sds password);
 #define ZADD_CH (1<<16)      /* Return num of elements added or updated. */
 
 /* Struct to hold an inclusive/exclusive range spec by score comparison. */
+//描述分数区间的结构体
 typedef struct {
+    //最小值, 最大值
     double min, max;
+    //是否包含最小值, 是否包含最大值
     int minex, maxex; /* are min or max exclusive? */
 } zrangespec;
 
 /* Struct to hold an inclusive/exclusive range spec by lexicographic comparison. */
+//描述字符串区间的结构体
 typedef struct {
+    //最小字符串和最大字符串
     sds min, max;     /* May be set to shared.(minstring|maxstring) */
+    //是否包含最小值和最大值
     int minex, maxex; /* are min or max exclusive? */
 } zlexrangespec;
 
