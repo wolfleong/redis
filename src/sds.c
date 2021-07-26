@@ -938,14 +938,20 @@ void sdstoupper(sds s) {
  * If two strings share exactly the same prefix, but one of the two has
  * additional characters, the longer string is considered to be greater than
  * the smaller one. */
+//比较两个sds的大小
 int sdscmp(const sds s1, const sds s2) {
     size_t l1, l2, minlen;
     int cmp;
 
+    //获取s1的长度
     l1 = sdslen(s1);
+    //获取s2的长度
     l2 = sdslen(s2);
+    //获取两个sds的最值长度
     minlen = (l1 < l2) ? l1 : l2;
+    //进行内存比较
     cmp = memcmp(s1,s2,minlen);
+    //如果比较结果一样, 则那个sds长则那个大
     if (cmp == 0) return l1>l2? 1: (l1<l2? -1: 0);
     return cmp;
 }
