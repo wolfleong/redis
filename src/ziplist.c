@@ -241,9 +241,11 @@
 /* The size of a ziplist header: two 32 bit integers for the total
  * bytes count and last item offset. One 16 bit integer for the number
  * of items field. */
+//4*2 + 2 = 10 个字节
 #define ZIPLIST_HEADER_SIZE     (sizeof(uint32_t)*2+sizeof(uint16_t))
 
 /* Size of the "end of ziplist" entry. Just one byte. */
+//8位int, 也就是1字节
 #define ZIPLIST_END_SIZE        (sizeof(uint8_t))
 
 /* Return the pointer to the first entry of a ziplist. */
@@ -699,12 +701,19 @@ static inline void zipAssertValidEntry(unsigned char* zl, size_t zlbytes, unsign
 
 /* Create a new empty ziplist. */
 unsigned char *ziplistNew(void) {
+    //目测bytes=11. ZIPLIST_HEADER_SIZE 4*2 + 2 = 10 个字节, ZIPLIST_END_SIZE 1个字节
     unsigned int bytes = ZIPLIST_HEADER_SIZE+ZIPLIST_END_SIZE;
+    //分配内存
     unsigned char *zl = zmalloc(bytes);
+    //压缩列表总字节长度 *((uint32_t*)(zl)) = bytes; 就相当于将 bytes 值设置到指针的前32位当中.
     ZIPLIST_BYTES(zl) = intrev32ifbe(bytes);
+    // 尾部节点字节距离 *((uint32_t*)((zl)+sizeof(uint32_t))) = sizeof(uint32_t)*2+sizeof(uint16_t)
     ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(ZIPLIST_HEADER_SIZE);
+    // 压缩列表节点个数 *((uint16_t*)((zl)+sizeof(uint32_t)*2)) = 0
     ZIPLIST_LENGTH(zl) = 0;
+    // 255特殊结尾值
     zl[bytes-1] = ZIP_END;
+    //返回字符串数组
     return zl;
 }
 
