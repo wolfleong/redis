@@ -724,11 +724,12 @@ zskiplistNode* zslGetElementByRank(zskiplist *zsl, unsigned long rank) {
             //获取节点
             x = x->level[i].forward;
         }
-        //找到排名,
+        //如果给定排名存在, 则直接返回节点
         if (traversed == rank) {
             return x;
         }
     }
+    //没找到, 返回 NULL
     return NULL;
 }
 
@@ -966,12 +967,17 @@ zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range) {
  * Ziplist-backed sorted set API
  *----------------------------------------------------------------------------*/
 
+//字符串变成浮点数
 double zzlStrtod(unsigned char *vstr, unsigned int vlen) {
     char buf[128];
+    //保证, vlen 最长是128字节
     if (vlen > sizeof(buf))
         vlen = sizeof(buf);
+    //将最长128个字符拷贝到buf中
     memcpy(buf,vstr,vlen);
+    //设置字符结束符
     buf[vlen] = '\0';
+    //转换成浮点数
     return strtod(buf,NULL);
  }
 
