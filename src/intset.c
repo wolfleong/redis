@@ -38,10 +38,14 @@
 
 /* Note that these encodings are ordered, so:
  * INTSET_ENC_INT16 < INTSET_ENC_INT32 < INTSET_ENC_INT64. */
+//16位编码类型
 #define INTSET_ENC_INT16 (sizeof(int16_t))
+//32位编码类型
 #define INTSET_ENC_INT32 (sizeof(int32_t))
+//64位编码类型
 #define INTSET_ENC_INT64 (sizeof(int64_t))
 
+//根据给定的int值的大小, 返回最适合的编码类型
 /* Return the required encoding for the provided value. */
 static uint8_t _intsetValueEncoding(int64_t v) {
     if (v < INT32_MIN || v > INT32_MAX)
@@ -52,43 +56,54 @@ static uint8_t _intsetValueEncoding(int64_t v) {
         return INTSET_ENC_INT16;
 }
 
+//根据编码, 获取集合中给定索引的值返回
 /* Return the value at pos, given an encoding. */
 static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
     int64_t v64;
     int32_t v32;
     int16_t v16;
 
+    //如果是64位编码
     if (enc == INTSET_ENC_INT64) {
+        //将数组强转成64位的数组, 并且拷贝给定位置64位的值到 v64 变量中返回
         memcpy(&v64,((int64_t*)is->contents)+pos,sizeof(v64));
         memrev64ifbe(&v64);
         return v64;
+        //获取32位编码获取给定索引的值
     } else if (enc == INTSET_ENC_INT32) {
         memcpy(&v32,((int32_t*)is->contents)+pos,sizeof(v32));
         memrev32ifbe(&v32);
         return v32;
     } else {
+        //获取16位编码给索引的值
         memcpy(&v16,((int16_t*)is->contents)+pos,sizeof(v16));
         memrev16ifbe(&v16);
         return v16;
     }
 }
 
+//获取给定索引的值
 /* Return the value at pos, using the configured encoding. */
 static int64_t _intsetGet(intset *is, int pos) {
     return _intsetGetEncoded(is,pos,intrev32ifbe(is->encoding));
 }
 
+//将值设置到集合的给定索引位置上
 /* Set the value at pos, using the configured encoding. */
 static void _intsetSet(intset *is, int pos, int64_t value) {
+    //获取intSet的编码
     uint32_t encoding = intrev32ifbe(is->encoding);
 
+    //如果是64位, 将数组强转为64位数据, 然后将 int64 的值直接赋值到给定位置上
     if (encoding == INTSET_ENC_INT64) {
         ((int64_t*)is->contents)[pos] = value;
         memrev64ifbe(((int64_t*)is->contents)+pos);
+        //如果是32位, 将数组强转为32位数据, 然后将 int32 的值直接赋值到给定位置上
     } else if (encoding == INTSET_ENC_INT32) {
         ((int32_t*)is->contents)[pos] = value;
         memrev32ifbe(((int32_t*)is->contents)+pos);
     } else {
+        //如果是16位, 将数组强转为16位数据, 然后将 int16 的值直接赋值到给定位置上
         ((int16_t*)is->contents)[pos] = value;
         memrev16ifbe(((int16_t*)is->contents)+pos);
     }
