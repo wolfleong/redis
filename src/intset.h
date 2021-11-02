@@ -37,7 +37,7 @@ typedef struct intset {
     uint32_t encoding;
     //集合中元素的数量
     uint32_t length;
-    //保存元素的数组
+    //保存元素的数组. 声明空数组, 对这个结构体来说, 是不占空间大小的. 数组大小是动态分配的
     int8_t contents[];
 } intset;
 
@@ -57,7 +57,7 @@ uint8_t intsetGet(intset *is, uint32_t pos, int64_t *value);
 uint32_t intsetLen(const intset *is);
 //获取集合的二进制长度(内存大小)
 size_t intsetBlobLen(intset *is);
-//
+//验证数据结构的完整性
 int intsetValidateIntegrity(const unsigned char *is, size_t size, int deep);
 
 #ifdef REDIS_TEST
