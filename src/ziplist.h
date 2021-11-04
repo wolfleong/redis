@@ -31,7 +31,9 @@
 #ifndef _ZIPLIST_H
 #define _ZIPLIST_H
 
+//头部添加
 #define ZIPLIST_HEAD 0
+//尾部添加
 #define ZIPLIST_TAIL 1
 
 /* Each entry in the ziplist is either a string or an integer. */
