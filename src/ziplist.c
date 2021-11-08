@@ -445,7 +445,7 @@ unsigned int zipStoreEntryEncoding(unsigned char *p, unsigned char encoding, uns
         } else if ((encoding) == ZIP_STR_32B) {                                \
             /*用5个字节存*/                                                                    \
             (lensize) = 5;                                                     \
-            /*获取entry的内容大小, 首字节不存内容*/                                                                    \
+            /*获取entry的内容大小, 首字节不存内容, 只使用后面四个字节. 为什么能左移24位, 把 (ptr)[1] 当做四个字节的int来看就明白了 */                                                                    \
             (len) = ((ptr)[1] << 24) |                                         \
                     ((ptr)[2] << 16) |                                         \
                     ((ptr)[3] <<  8) |                                         \
@@ -523,8 +523,8 @@ unsigned int zipStorePrevEntryLength(unsigned char *p, unsigned int len) {
 //这个函数作用就是获取前一个entry的字节大小. 也就是解码PREVLEN
 // ZIP_DECODE_PREVLENSIZE 获取前一个entry的长度表示的字节数,
 // 如果是1, 则直接取第一个字节作为前一个节点的长度大小,
-// 如果是5, 则第1个字节固定为 ZIP_BIG_PREVLEN(254), 相当于标示, 后面4个字节的大小就是前一个entry的长度.
-// 所以 prevlen 只要需要获取后面四个字节的数据. 后面这个位移操作完全看不懂 ?????
+// 如果是5, 则第1个字节固定为 ZIP_BIG_PREVLEN(254), 相当于标识, 后面4个字节的大小就是前一个entry的长度.
+// 所以 prevlen 只要需要获取后面四个字节的数据. todo 后面这个位移操作完全看不懂 ?????
 #define ZIP_DECODE_PREVLEN(ptr, prevlensize, prevlen) do { \
     ZIP_DECODE_PREVLENSIZE(ptr, prevlensize);                                  \
     if ((prevlensize) == 1) {                                                  \
@@ -686,17 +686,23 @@ static inline int zipEntrySafe(unsigned char* zl, size_t zlbytes, unsigned char 
         ZIP_ENTRY_ENCODING(p + e->prevrawlensize, e->encoding);
         //获取编码长度
         ZIP_DECODE_LENGTH(p + e->prevrawlensize, e->encoding, e->lensize, e->len);
+        //设置头部长度
         e->headersize = e->prevrawlensize + e->lensize;
+        //设置当前节点指针
         e->p = p;
         /* We didn't call ZIP_ASSERT_ENCODING, so we check lensize was set to 0. */
+        //如果节点大小为0 , 则返回校验失败
         if (unlikely(e->lensize == 0))
             return 0;
         /* Make sure the entry doesn't rech outside the edge of the ziplist */
+        //如果节点的总大小已经超过最大最小范围, 则返回校验失败
         if (OUT_OF_RANGE(p + e->headersize + e->len))
             return 0;
         /* Make sure prevlen doesn't rech outside the edge of the ziplist */
+        //校验前一个节点, 且前一个节点也超出范围, 则返回校验失败
         if (validate_prevlen && OUT_OF_RANGE(p - e->prevrawlen))
             return 0;
+        //返回校验成功
         return 1;
     }
 
@@ -1003,6 +1009,7 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     //非结束符
     /* Find out prevlen for the entry that is inserted. */
     if (p[0] != ZIP_END) {
+        //获取p节点的前一个节点的长度编码和长度大小
         ZIP_DECODE_PREVLEN(p, prevlensize, prevlen);
     } else {
         //结束符
