@@ -192,7 +192,9 @@
 #include "endianconv.h"
 #include "redisassert.h"
 
+//11111111
 #define ZIP_END 255         /* Special "end of ziplist" entry. */
+//11111110
 #define ZIP_BIG_PREVLEN 254 /* ZIP_BIG_PREVLEN - 1 is the max number of bytes of
                                the previous entry, for the "prevlen" field prefixing
                                each entry, to be represented with just a single byte.
@@ -201,15 +203,24 @@
                                representing the previous entry len. */
 
 /* Different encoding/length possibilities */
+//0xc0 相当于 11000000
 #define ZIP_STR_MASK 0xc0
 #define ZIP_INT_MASK 0x30
+//00000000, 前两位标记编码, 后6位存储长度
 #define ZIP_STR_06B (0 << 6)
+//01000000 前2位为编码后14位为长度
 #define ZIP_STR_14B (1 << 6)
+//10000000
 #define ZIP_STR_32B (2 << 6)
+//11000000
 #define ZIP_INT_16B (0xc0 | 0<<4)
+//11010000
 #define ZIP_INT_32B (0xc0 | 1<<4)
+//11100000
 #define ZIP_INT_64B (0xc0 | 2<<4)
+//11110000
 #define ZIP_INT_24B (0xc0 | 3<<4)
+//11111110
 #define ZIP_INT_8B 0xfe
 
 /* 4 bit integer immediate encoding |1111xxxx| with xxxx between
@@ -281,9 +292,9 @@
  * get filled by a function in order to operate more easily. */
 //节点结构全
 typedef struct zlentry {
-    //前一个节点长度的字节大小
+    //前一个节点entry长度的字节大小
     unsigned int prevrawlensize; /* Bytes used to encode the previous entry len*/
-    //前一个节点的长度
+    //前一个节点entry的长度大小
     unsigned int prevrawlen;     /* Previous entry len. */
     //编码len所需的字节大小
     unsigned int lensize;        /* Bytes used to encode this entry type/len.
@@ -307,6 +318,7 @@ typedef struct zlentry {
                                     is, this points to prev-entry-len field. */
 } zlentry;
 
+//清空节点
 #define ZIPLIST_ENTRY_ZERO(zle) { \
     (zle)->prevrawlensize = (zle)->prevrawlen = 0; \
     (zle)->lensize = (zle)->len = (zle)->headersize = 0; \
@@ -316,6 +328,7 @@ typedef struct zlentry {
 
 /* Extract the encoding from the byte pointed by 'ptr' and set it into
  * 'encoding' field of the zlentry structure. */
+//获取encoding的内容, 如果小于 ZIP_STR_MASK , 则表示当前编码为字符串类型的编码. 然后用 ZIP_STR_MASK 获取具体的编码
 #define ZIP_ENTRY_ENCODING(ptr, encoding) do {  \
     (encoding) = ((ptr)[0]); \
     if ((encoding) < ZIP_STR_MASK) (encoding) &= ZIP_STR_MASK; \
@@ -344,6 +357,7 @@ static inline unsigned int zipEncodingLenSize(unsigned char encoding) {
     assert(zipEncodingLenSize(encoding) != ZIP_ENCODING_SIZE_INVALID);         \
 } while (0)
 
+//根据编码返回存储int需要的字节大小
 /* Return bytes needed to store integer encoded by 'encoding' */
 static inline unsigned int zipIntSize(unsigned char encoding) {
     switch(encoding) {
@@ -413,34 +427,48 @@ unsigned int zipStoreEntryEncoding(unsigned char *p, unsigned char encoding, uns
  * length, and the 'len' variable will hold the entry length.
  * On invalid encoding error, lensize is set to 0. */
 #define ZIP_DECODE_LENGTH(ptr, encoding, lensize, len) do {                    \
+    /*如果是字符串类型编码*/                                                       \
     if ((encoding) < ZIP_STR_MASK) {                                           \
+        /*判断是不是6位长度*/                                                     \
         if ((encoding) == ZIP_STR_06B) {                                       \
+            /*判断是不是6位长度的数据用1个字节存*/                                   \
             (lensize) = 1;                                                     \
+            /*0x3f = 00111111, (ptr)[0] & 0x3f就是获取entry的内容长度*/\
             (len) = (ptr)[0] & 0x3f;                                           \
+            /*如果14位的字符编码*/\
         } else if ((encoding) == ZIP_STR_14B) {                                \
+            /*用两个字节存*/                                                                    \
             (lensize) = 2;                                                     \
+            /*获取第一个字节后6位与第2个字节的8位合成entry的内容大小*/                                                                    \
             (len) = (((ptr)[0] & 0x3f) << 8) | (ptr)[1];                       \
+           /*如果字符编码是32位*/                                                           \
         } else if ((encoding) == ZIP_STR_32B) {                                \
+            /*用5个字节存*/                                                                    \
             (lensize) = 5;                                                     \
+            /*获取entry的内容大小, 首字节不存内容*/                                                                    \
             (len) = ((ptr)[1] << 24) |                                         \
                     ((ptr)[2] << 16) |                                         \
                     ((ptr)[3] <<  8) |                                         \
                     ((ptr)[4]);                                                \
         } else {                                                               \
+            /*无法确定编码, 默认给0*/                                                                    \
             (lensize) = 0; /* bad encoding, should be covered by a previous */ \
             (len) = 0;     /* ZIP_ASSERT_ENCODING / zipEncodingLenSize, or  */ \
                            /* match the lensize after this macro with 0.    */ \
         }                                                                      \
     } else {                                                                   \
+         /*int默认的长度编码都是一个字节*/ \
         (lensize) = 1;                                                         \
         if ((encoding) == ZIP_INT_8B)  (len) = 1;                              \
         else if ((encoding) == ZIP_INT_16B) (len) = 2;                         \
         else if ((encoding) == ZIP_INT_24B) (len) = 3;                         \
         else if ((encoding) == ZIP_INT_32B) (len) = 4;                         \
         else if ((encoding) == ZIP_INT_64B) (len) = 8;                         \
+        /*超过最大最小值, 默认给0*/                                                                        \
         else if (encoding >= ZIP_INT_IMM_MIN && encoding <= ZIP_INT_IMM_MAX)   \
             (len) = 0; /* 4 bit immediate */                                   \
         else                                                                   \
+            /*无法确定编码, 默认给0*/ \
             (lensize) = (len) = 0; /* bad encoding */                          \
     }                                                                          \
 } while(0)
@@ -475,6 +503,8 @@ unsigned int zipStorePrevEntryLength(unsigned char *p, unsigned int len) {
 
 /* Return the number of bytes used to encode the length of the previous
  * entry. The length is returned by setting the var 'prevlensize'. */
+//判断entry第一个字节, 如果小于 254, 则表示前一个entry是长度是用一个字节表示.
+// 大于等于254, 则表示前一个entry的长度是用5个字节表示
 #define ZIP_DECODE_PREVLENSIZE(ptr, prevlensize) do {                          \
     if ((ptr)[0] < ZIP_BIG_PREVLEN) {                                          \
         (prevlensize) = 1;                                                     \
@@ -490,7 +520,12 @@ unsigned int zipStorePrevEntryLength(unsigned char *p, unsigned int len) {
  * The length of the previous entry is stored in 'prevlen', the number of
  * bytes needed to encode the previous entry length are stored in
  * 'prevlensize'. */
-#define ZIP_DECODE_PREVLEN(ptr, prevlensize, prevlen) do {                     \
+//这个函数作用就是获取前一个entry的字节大小. 也就是解码PREVLEN
+// ZIP_DECODE_PREVLENSIZE 获取前一个entry的长度表示的字节数,
+// 如果是1, 则直接取第一个字节作为前一个节点的长度大小,
+// 如果是5, 则第1个字节固定为 ZIP_BIG_PREVLEN(254), 相当于标示, 后面4个字节的大小就是前一个entry的长度.
+// 所以 prevlen 只要需要获取后面四个字节的数据. 后面这个位移操作完全看不懂 ?????
+#define ZIP_DECODE_PREVLEN(ptr, prevlensize, prevlen) do { \
     ZIP_DECODE_PREVLENSIZE(ptr, prevlensize);                                  \
     if ((prevlensize) == 1) {                                                  \
         (prevlen) = (ptr)[0];                                                  \
@@ -633,15 +668,23 @@ static inline void zipEntry(unsigned char *p, zlentry *e) {
  * try to access memory outside the ziplist payload.
  * Returns 1 if the entry is valid, and 0 otherwise. */
 static inline int zipEntrySafe(unsigned char* zl, size_t zlbytes, unsigned char *p, zlentry *e, int validate_prevlen) {
+    //首节点指针
     unsigned char *zlfirst = zl + ZIPLIST_HEADER_SIZE;
+    //获取结束符的指针
     unsigned char *zllast = zl + zlbytes - ZIPLIST_END_SIZE;
+    //https://www.cnblogs.com/vinozly/p/5624823.html unlikely 主要是提高系统执行速度, 对表达式没有影响
+    //定义一个判断内存是否越界的函数, 小于最小或者大于最大
 #define OUT_OF_RANGE(p) (unlikely((p) < zlfirst || (p) > zllast))
 
     /* If threre's no possibility for the header to reach outside the ziplist,
      * take the fast path. (max lensize and prevrawlensize are both 5 bytes) */
+    //如果给定指针p大于等于首节点指针表小于结束符, 并且内存大于10个字节
     if (p >= zlfirst && p + 10 < zllast) {
+        //获取前一个entry的长度编码及长度
         ZIP_DECODE_PREVLEN(p, e->prevrawlensize, e->prevrawlen);
+        //获取当前节点的编码, 跳过 prevrawlensize 个字节, 也就是 encoding 了
         ZIP_ENTRY_ENCODING(p + e->prevrawlensize, e->encoding);
+        //获取编码长度
         ZIP_DECODE_LENGTH(p + e->prevrawlensize, e->encoding, e->lensize, e->len);
         e->headersize = e->prevrawlensize + e->lensize;
         e->p = p;
@@ -698,7 +741,9 @@ static inline int zipEntrySafe(unsigned char* zl, size_t zlbytes, unsigned char 
 /* Return the total number of bytes used by the entry pointed to by 'p'. */
 static inline unsigned int zipRawEntryLengthSafe(unsigned char* zl, size_t zlbytes, unsigned char *p) {
     zlentry e;
+    //断言entry节点是否正常
     assert(zipEntrySafe(zl, zlbytes, p, &e, 0));
+    //返回节点的字节大小
     return e.headersize + e.len;
 }
 
@@ -955,11 +1000,15 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
                                     we use it uninitialized. */
     zlentry tail;
 
+    //非结束符
     /* Find out prevlen for the entry that is inserted. */
     if (p[0] != ZIP_END) {
         ZIP_DECODE_PREVLEN(p, prevlensize, prevlen);
     } else {
+        //结束符
+        //获取尾节点指针
         unsigned char *ptail = ZIPLIST_ENTRY_TAIL(zl);
+        //如果尾节点指针不是结束符, 则为正常的节点
         if (ptail[0] != ZIP_END) {
             prevlen = zipRawEntryLengthSafe(zl, curlen, ptail);
         }
