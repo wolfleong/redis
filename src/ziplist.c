@@ -334,10 +334,12 @@ typedef struct zlentry {
     if ((encoding) < ZIP_STR_MASK) (encoding) &= ZIP_STR_MASK; \
 } while(0)
 
-#define ZIP_ENCODING_SIZE_INVALID 0xff
+#define ZIP_ENCODING_SIZE_INVALID 0xff // 0xff 等于 11111111
+//根据编码, 获取节点的长度编码
 /* Return the number of bytes required to encode the entry type + length.
  * On error, return ZIP_ENCODING_SIZE_INVALID */
 static inline unsigned int zipEncodingLenSize(unsigned char encoding) {
+    //int 相关类型 1 个字节
     if (encoding == ZIP_INT_16B || encoding == ZIP_INT_32B ||
         encoding == ZIP_INT_24B || encoding == ZIP_INT_64B ||
         encoding == ZIP_INT_8B)
@@ -346,10 +348,13 @@ static inline unsigned int zipEncodingLenSize(unsigned char encoding) {
         return 1;
     if (encoding == ZIP_STR_06B)
         return 1;
+    //14位字符编码, 2个字节
     if (encoding == ZIP_STR_14B)
         return 2;
+    //32位字符编码, 5个字节
     if (encoding == ZIP_STR_32B)
         return 5;
+    //非法长度编码
     return ZIP_ENCODING_SIZE_INVALID;
 }
 
@@ -663,6 +668,7 @@ static inline void zipEntry(unsigned char *p, zlentry *e) {
     e->p = p;
 }
 
+//解析出节点的所有信息放到 e 中, 并且校验不信任指针p的内存不超过压缩列表的范围(判断是否越界)
 /* Fills a struct with all information about an entry.
  * This function is safe to use on untrusted pointers, it'll make sure not to
  * try to access memory outside the ziplist payload.
@@ -673,18 +679,19 @@ static inline int zipEntrySafe(unsigned char* zl, size_t zlbytes, unsigned char 
     //获取结束符的指针
     unsigned char *zllast = zl + zlbytes - ZIPLIST_END_SIZE;
     //https://www.cnblogs.com/vinozly/p/5624823.html unlikely 主要是提高系统执行速度, 对表达式没有影响
-    //定义一个判断内存是否越界的函数, 小于最小或者大于最大
+    //定义一个判断内存是否越界的函数, 小于最小指针或者大于最大指针都是超出界限的
 #define OUT_OF_RANGE(p) (unlikely((p) < zlfirst || (p) > zllast))
 
     /* If threre's no possibility for the header to reach outside the ziplist,
      * take the fast path. (max lensize and prevrawlensize are both 5 bytes) */
-    //如果给定指针p大于等于首节点指针表小于结束符, 并且内存大于10个字节
+    //快速校验 todo 不明白这快速校验的意义?
+    //如果给定指针p大于等于首节点指针表小于结束符, 并且内存大小大于10个字节
     if (p >= zlfirst && p + 10 < zllast) {
-        //获取前一个entry的长度编码及长度
+        //解码前一个entry的长度编码及长度
         ZIP_DECODE_PREVLEN(p, e->prevrawlensize, e->prevrawlen);
         //获取当前节点的编码, 跳过 prevrawlensize 个字节, 也就是 encoding 了
         ZIP_ENTRY_ENCODING(p + e->prevrawlensize, e->encoding);
-        //获取编码长度
+        //解码entry的长度
         ZIP_DECODE_LENGTH(p + e->prevrawlensize, e->encoding, e->lensize, e->len);
         //设置头部长度
         e->headersize = e->prevrawlensize + e->lensize;
@@ -695,51 +702,66 @@ static inline int zipEntrySafe(unsigned char* zl, size_t zlbytes, unsigned char 
         if (unlikely(e->lensize == 0))
             return 0;
         /* Make sure the entry doesn't rech outside the edge of the ziplist */
-        //如果节点的总大小已经超过最大最小范围, 则返回校验失败
+        //校验头部大小和节点长度
         if (OUT_OF_RANGE(p + e->headersize + e->len))
             return 0;
         /* Make sure prevlen doesn't rech outside the edge of the ziplist */
-        //校验前一个节点, 且前一个节点也超出范围, 则返回校验失败
+        //如果要校验前一个节点, 且前一个节点也超出范围, 则返回校验失败
         if (validate_prevlen && OUT_OF_RANGE(p - e->prevrawlen))
             return 0;
         //返回校验成功
         return 1;
     }
 
+    //判断指针是否合法
     /* Make sure the pointer doesn't rech outside the edge of the ziplist */
     if (OUT_OF_RANGE(p))
         return 0;
 
     /* Make sure the encoded prevlen header doesn't reach outside the allocation */
+    //获取节点中关于前一个节点的长度编码 prevrawlensize
     ZIP_DECODE_PREVLENSIZE(p, e->prevrawlensize);
+    //校验 prevrawlensize 是否合法
     if (OUT_OF_RANGE(p + e->prevrawlensize))
         return 0;
 
     /* Make sure encoded entry header is valid. */
+    //获取entry的编码
     ZIP_ENTRY_ENCODING(p + e->prevrawlensize, e->encoding);
+    //根据entry的编码, 获取节点的长度编码
     e->lensize = zipEncodingLenSize(e->encoding);
+    //判断长度编码是否合法, 则返回校验失败
     if (unlikely(e->lensize == ZIP_ENCODING_SIZE_INVALID))
         return 0;
 
     /* Make sure the encoded entry header doesn't reach outside the allocation */
+    //校验 lensize 长度是否合理.
     if (OUT_OF_RANGE(p + e->prevrawlensize + e->lensize))
         return 0;
 
+    //根据上一个节点的长度编码, 解码出上一个节点的长度
     /* Decode the prevlen and entry len headers. */
     ZIP_DECODE_PREVLEN(p, e->prevrawlensize, e->prevrawlen);
+    //根据节点的长度编码, 解码出节点的长度
     ZIP_DECODE_LENGTH(p + e->prevrawlensize, e->encoding, e->lensize, e->len);
+    //设置头部的大小
     e->headersize = e->prevrawlensize + e->lensize;
 
     /* Make sure the entry doesn't rech outside the edge of the ziplist */
+    //校验节点的头部和长度是否合法
     if (OUT_OF_RANGE(p + e->headersize + e->len))
         return 0;
 
+    //如果需要校验 prevlen , 则校验 prevlen 是否合法
     /* Make sure prevlen doesn't rech outside the edge of the ziplist */
     if (validate_prevlen && OUT_OF_RANGE(p - e->prevrawlen))
         return 0;
 
+    //设置节点指针
     e->p = p;
+    //返回校验成功
     return 1;
+    //取消 OUT_OF_RANGE 宏定义
 #undef OUT_OF_RANGE
 }
 
