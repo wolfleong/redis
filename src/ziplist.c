@@ -896,57 +896,81 @@ unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
  *
  * The pointer "p" points to the first entry that does NOT need to be
  * updated, i.e. consecutive fields MAY need an update. */
+//级联更新. *p 表示第一个变动大小的旧节点
 unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
+    //当前节点
     zlentry cur;
+    //当前节点的 prevlen.
     size_t prevlen, prevlensize, prevoffset; /* Informat of the last changed entry. */
     size_t firstentrylen; /* Used to handle insert at head. */
     size_t rawlen, curlen = intrev32ifbe(ZIPLIST_BYTES(zl));
     size_t extra = 0, cnt = 0, offset;
     size_t delta = 4; /* Extra bytes needed to update a entry's prevlen (5-1). */
+    //获取尾节点指针
     unsigned char *tail = zl + intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl));
 
     /* Empty ziplist */
+    //如果要级联更新的节点为空, 则直接返回
     if (p[0] == ZIP_END) return zl;
 
+    //获取当前节点
     zipEntry(p, &cur); /* no need for "safe" variant since the input pointer was validated by the function that returned it. */
+    //第一个节点的大小
     firstentrylen = prevlen = cur.headersize + cur.len;
+    //计算出下一个节点的 前节点长度编码
     prevlensize = zipStorePrevEntryLength(NULL, prevlen);
+    //当前节点的相对位置
     prevoffset = p - zl;
+    //获取下一个节点的指针
     p += prevlen;
 
     /* Iterate ziplist to find out how many extra bytes do we need to update it. */
+    //如果下一个字节不为 ZIP_END, 表示后面还有节点
     while (p[0] != ZIP_END) {
+        //断言压缩列表是否越界, 并且将p节点信息解析到 cur 中
         assert(zipEntrySafe(zl, curlen, p, &cur, 0));
 
         /* Abort when "prevlen" has not changed. */
+        //prevlen 相当于上一个节点的长度
+        //如果当前节点cur的记录的上一个节点的长度等于 prevlen, 则直接退出循环
         if (cur.prevrawlen == prevlen) break;
 
         /* Abort when entry's "prevlensize" is big enough. */
+        //如果当前节点的关于前一个节点的编码大于等于上一个节点的长度编码
         if (cur.prevrawlensize >= prevlensize) {
+            //如果长度编码相等, 则直接将上一个节点的长度写入当前节点的 prevlen 中
             if (cur.prevrawlensize == prevlensize) {
                 zipStorePrevEntryLength(p, prevlen);
             } else {
                 /* This would result in shrinking, which we want to avoid.
                  * So, set "prevlen" in the available bytes. */
+                //如果后一个节点的前节点长度编码比前一节点的长度编码大, 则不需缩小空间, 直接存
                 zipStorePrevEntryLengthLarge(p, prevlen);
             }
+            //退出循环
             break;
         }
 
+        //能跑到这里, 表示当前节点cur关于前节点的长度是比前一个节点的长度小. 也就是肯定需要做一些扩容
+        //
         /* cur.prevrawlen means cur is the former head entry. */
         assert(cur.prevrawlen == 0 || cur.prevrawlen + delta == prevlen);
 
         /* Update prev entry's info and advance the cursor. */
         rawlen = cur.headersize + cur.len;
-        prevlen = rawlen + delta; 
+        prevlen = rawlen + delta;
+        //计算出前一个长度编码
         prevlensize = zipStorePrevEntryLength(NULL, prevlen);
         prevoffset = p - zl;
         p += rawlen;
+        //统计需要增加要扩展的字节
         extra += delta;
+        //要迁移的节点个数
         cnt++;
     }
 
     /* Extra bytes is zero all update has been done(or no need to update). */
+    //如果不需要扩展, 则直接返回压缩列表
     if (extra == 0) return zl;
 
     /* Update tail offset after loop. */
@@ -1160,17 +1184,20 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     //p指针不是 ZIP_END
     if (p[0] != ZIP_END) {
         /* Subtract one because of the ZIP_END bytes */
-        //void *memmove(void *dst, const void *src, size_t len)
-        //将p指针后面的内容移动到后面, 预留足够的空间(reqlen)给新的节点
-        //p+reqlen 相当于写入的位置, 跳过 reqlen
-        //p-nextdiff 相当于将从 p-nextdiff 开始移, 也就是当作p节点已经多了 nextdiff 个字节
-        //curlen-offset-1+nextdiff, curlen-offset-1 相当于p之后的字节数, 然后加上 nextdiff 的字节数
+        //void *memmove(void *dst, const void *src, size_t len) 注意memmove方法是内存拷贝, 不是移动.
+        //将p指针后面的内容拷贝到后面, 预留足够的空间(reqlen)给新的节点
+        //p+reqlen 相当于写入的位置, 跳过 reqlen, 也就是保留新节点的长度
+        //p-nextdiff 相当于将从 p-nextdiff 开始拷贝
+        //当 nextdiff = 0 时, 只是简单将 p 指针后面的节点拷贝走
+        //当 nextdiff = -4 时, 相当于将p指针的节点少拷贝 4 个字节
+        //当 nextdiff = 4 时, 相当于将p指针的节点多拷贝 4 个字节
+        //curlen-offset-1+nextdiff 表示拷贝长度, curlen-offset-1 表示p指针后面的节点但是跳过了 ZIP_END 的一个字节.
         memmove(p+reqlen,p-nextdiff,curlen-offset-1+nextdiff);
 
         /* Encode this entry's raw length in the next entry. */
         //处理超过254的长度
         if (forcelarge)
-            //将长度放到长度编码中
+            //将新节点的长度放到下一个节点的prevlen中
             zipStorePrevEntryLengthLarge(p+reqlen,reqlen);
         else
             //将长度放到长度编码中
@@ -1184,11 +1211,11 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
         /* When the tail contains more than one entry, we need to take
          * "nextdiff" in account as well. Otherwise, a change in the
          * size of prevlen doesn't have an effect on the *tail* offset. */
-        //断言压缩列表节点是否安全, 并且获取 tail 节点
+        //断言压缩列表节点是否安全, 并且获取插入节点的后一个节点
         assert(zipEntrySafe(zl, newlen, p+reqlen, &tail, 1));
         //如果插入新节点后面只有一个节点, 也就是tail节点, 那么 reqlen+tail.headersize+tail.len 就等于于 ZIP_END 的位置
         //那么 TAIL_OFFSET 不需要加上 nextdiff , 也没有影响. 因为 nextdiff 只对 tail 节点有影响
-        //如果插入新节点后面有多个节点, 那么 TAIL_OFFSET 就得加上 nextdiff
+        //如果插入新节点后面有多个节点, 那么 TAIL_OFFSET 就得加上 nextdiff, 因为对新插入节点的后一个节点有影响
         if (p[reqlen+tail.headersize+tail.len] != ZIP_END) {
             ZIPLIST_TAIL_OFFSET(zl) =
                 intrev32ifbe(intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl))+nextdiff);
@@ -1205,7 +1232,7 @@ unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned cha
     if (nextdiff != 0) {
         //zl是压缩列表的指针. 先获取p节点的相对位置 offset , 级联更新扩容之后, 再获取p
         offset = p-zl;
-        //级联更新
+        //级联更新, 由于后面第一个节点的大小发生变化, 极端情况下有可能导致后面所有节点的级联更新 prevlen 的大小
         zl = __ziplistCascadeUpdate(zl,p+reqlen);
         //根据相对位置再获取p指针
         p = zl+offset;
